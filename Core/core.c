@@ -30,6 +30,7 @@
 #define MAXCONN 5
 
 extern char **environ; /* the environment */
+int i = 0; /* unconnected index for fors */
 
 /*
  * error - wrapper for perror used for bad syscalls
@@ -147,8 +148,8 @@ int main(int argc, char **argv) {
 
     /* read (and ignore) the HTTP headers. May be used to work with post requests */
 
-    printf("REQUEST: \n%s", f_to_s(buf, stream));
-    printf("\nIm good! \n");
+    printf("REQUEST: \n%s\n", f_to_s(request_data, stream));
+    printf("\n");
 
 
     /* parse the uri [crufty] */
@@ -270,5 +271,9 @@ int main(int argc, char **argv) {
     fclose(stream);
     close(childfd);
 
+    /* clear request_data */
+    for(i = 0; i < sizeof(request_data)/sizeof(request_data[0]); i++){
+      request_data[i] = 0;
+    }
   }
 }

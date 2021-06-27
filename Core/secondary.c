@@ -13,8 +13,7 @@ int choose_port(int argc, char **argv){
     }
 }
 
-char* f_to_s (char const * buffer, FILE * infile){
-    /* declare a file pointer */
+char* f_to_s (char * buffer, FILE * infile){
     long numbytes;
     /* Get the number of bytes */
     fseek(infile, 0L, SEEK_END);
