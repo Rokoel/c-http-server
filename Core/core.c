@@ -32,30 +32,6 @@
 extern char **environ; /* the environment */
 int i = 0; /* unconnected index for fors */
 
-/*
- * error - wrapper for perror used for bad syscalls
- */
-void error(char *msg) {
-  perror(msg);
-  exit(1);
-}
-
-
-/*
- * cerror - returns an error message to the client
- */
-void cerror(FILE *stream, char *cause, char *errno, 
-	char *shortmsg, char *longmsg) {
-  fprintf(stream, "HTTP/1.1 %s %s\n", errno, shortmsg);
-  fprintf(stream, "Content-type: text/html\n");
-  fprintf(stream, "\n");
-  fprintf(stream, "<html><title>Tiny Error</title>");
-  fprintf(stream, "<body bgcolor=""ffffff"">\n");
-  fprintf(stream, "%s: %s\n", errno, shortmsg);
-  fprintf(stream, "<p>%s: %s\n", longmsg, cause);
-  fprintf(stream, "<hr><em>The Tiny Web server</em>\n");
-}
-
 
 int main(int argc, char **argv) {
 
@@ -87,18 +63,17 @@ int main(int argc, char **argv) {
   int wait_status;       /* status from wait */
   char request_data[BUFSIZE]; /* headers and data in one */
 
+
+  /*=========================PREPARE-FOR-MAIN-LOOP====================================*/
   /* choose a port */
   portno = choose_port(argc, argv);
   /* open socket descriptor */
   parentfd = socket(AF_INET, SOCK_STREAM, 0);
   if (parentfd < 0) 
     error("ERROR opening socket");
-
   /* allows us to restart server immediately */
   optval = 1;
-  setsockopt(parentfd, SOL_SOCKET, SO_REUSEADDR, 
-	     (const void *)&optval , sizeof(int));
-
+  setsockopt(parentfd, SOL_SOCKET, SO_REUSEADDR, (const void *)&optval, sizeof(int));
   /* bind port to socket */
   bzero((char *) &serveraddr, sizeof(serveraddr));
   serveraddr.sin_family = AF_INET;
@@ -107,18 +82,19 @@ int main(int argc, char **argv) {
   if (bind(parentfd, (struct sockaddr *) &serveraddr, 
 	   sizeof(serveraddr)) < 0) 
     error("ERROR on binding");
-
   /* get us ready to accept connection requests */
   if (listen(parentfd, MAXCONN) < 0) /* allow 5 requests to queue up */ 
     error("ERROR on listen");
+  /*==================================================================================*/
 
+  /*==================================================================================*/
   /* 
    * main loop: wait for a connection request, parse HTTP,
    * serve requested content, close connection.
    */
 
   printf("Server ready!\n");
-  printf("Waiting for connetions...\n");
+  printf("Waiting for connetions...\n\n");
   clientlen = sizeof(clientaddr);
   while (1) {
 
@@ -152,7 +128,7 @@ int main(int argc, char **argv) {
     printf("\n");
 
 
-    /* parse the uri [crufty] */
+    /* parse the uri [crufty] */ /* GET routing */
     if (!strstr(uri, "cgi-bin")) { /* static content */
       is_static = 1;
       strcpy(cgiargs, "");

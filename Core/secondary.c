@@ -25,3 +25,20 @@ char* f_to_s (char * buffer, FILE * infile){
     fread(buffer, sizeof(char), numbytes, infile);
     return buffer;
 }
+
+void error(char *msg) {
+  perror(msg);
+  exit(1);
+}
+
+void cerror(FILE *stream, char *cause, char *errno, 
+	char *shortmsg, char *longmsg) {
+  fprintf(stream, "HTTP/1.1 %s %s\n", errno, shortmsg);
+  fprintf(stream, "Content-type: text/html\n");
+  fprintf(stream, "\n");
+  fprintf(stream, "<html><title>Tiny Error</title>");
+  fprintf(stream, "<body bgcolor=""ffffff"">\n");
+  fprintf(stream, "%s: %s\n", errno, shortmsg);
+  fprintf(stream, "<p>%s: %s\n", longmsg, cause);
+  fprintf(stream, "<hr><em>The Tiny Web server</em>\n");
+}
