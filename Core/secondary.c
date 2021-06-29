@@ -2,6 +2,14 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/types.h> 
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/mman.h>
+
+typedef struct sockaddr_in S_ADDR; /* for passing sockadress in functions */
 
 int choose_port(int argc, char **argv){
     if (argc != 2) {
@@ -31,8 +39,7 @@ void error(char *msg) {
   exit(1);
 }
 
-void cerror(FILE *stream, char *cause, char *errno, 
-	char *shortmsg, char *longmsg) {
+void cerror(FILE *stream, char *cause, char *errno, char *shortmsg, char *longmsg) {
   fprintf(stream, "HTTP/1.1 %s %s\n", errno, shortmsg);
   fprintf(stream, "Content-type: text/html\n");
   fprintf(stream, "\n");
@@ -41,4 +48,40 @@ void cerror(FILE *stream, char *cause, char *errno,
   fprintf(stream, "%s: %s\n", errno, shortmsg);
   fprintf(stream, "<p>%s: %s\n", longmsg, cause);
   fprintf(stream, "<hr><em>The Tiny Web server</em>\n");
+}
+
+
+
+int prepare(int argc, char **argv, int* portno, int* parentfd, int* optval, S_ADDR* serveraddr, int maxconn){
+  /* choose a port */
+  *portno = choose_port(argc, argv);
+  /* open socket descriptor */
+  *parentfd = socket(AF_INET, SOCK_STREAM, 0);
+  if (*parentfd < 0){
+    error("FATAL ERROR opening socket");
+    return 0; /* we don't get here */
+  }
+  /* allows us to restart server immediately */
+  *optval = 1;
+  setsockopt(*parentfd, SOL_SOCKET, SO_REUSEADDR, (const void *)&(*optval), sizeof(int));
+
+  /* bind port to socket */
+  bzero((char *) serveraddr, sizeof(*serveraddr)); /* clear server address */
+  /* set server's data */
+  (*serveraddr).sin_family = AF_INET;
+  (*serveraddr).sin_addr.s_addr = htonl(INADDR_ANY);
+  (*serveraddr).sin_port = htons((unsigned short)(*portno));
+
+  /* bind */
+  if (bind(*parentfd, (struct sockaddr *) serveraddr, sizeof(*serveraddr)) < 0){
+    error("FATAL ERROR: binding failed");
+    return 0; /* we don't get here */
+  }
+
+  /* get us ready to accept connection requests, i.e. listen */
+  if (listen(*parentfd, maxconn) < 0){ /* allow maxconn requests (defined in core.c) to queue up */ 
+    error("FATAL ERROR: listening failed");
+    return 0; /* we don't get here */
+  }
+  return 1;
 }

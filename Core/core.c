@@ -21,7 +21,7 @@
 #include <sys/wait.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <ctype.h>
+//#include <ctype.h>
 
 #include "secondary.h"
 
@@ -43,6 +43,7 @@ int main(int argc, char **argv) {
   struct hostent *hostp; /* client host info */
   char *hostaddrp;       /* dotted decimal host addr string */
   int optval;            /* flag value for setsockopt */
+  typedef struct sockaddr_in S_ADDR;
   struct sockaddr_in serveraddr; /* server's addr */
   struct sockaddr_in clientaddr; /* client addr */
 
@@ -65,26 +66,7 @@ int main(int argc, char **argv) {
 
 
   /*=========================PREPARE-FOR-MAIN-LOOP====================================*/
-  /* choose a port */
-  portno = choose_port(argc, argv);
-  /* open socket descriptor */
-  parentfd = socket(AF_INET, SOCK_STREAM, 0);
-  if (parentfd < 0) 
-    error("ERROR opening socket");
-  /* allows us to restart server immediately */
-  optval = 1;
-  setsockopt(parentfd, SOL_SOCKET, SO_REUSEADDR, (const void *)&optval, sizeof(int));
-  /* bind port to socket */
-  bzero((char *) &serveraddr, sizeof(serveraddr));
-  serveraddr.sin_family = AF_INET;
-  serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
-  serveraddr.sin_port = htons((unsigned short)portno);
-  if (bind(parentfd, (struct sockaddr *) &serveraddr, 
-	   sizeof(serveraddr)) < 0) 
-    error("ERROR on binding");
-  /* get us ready to accept connection requests */
-  if (listen(parentfd, MAXCONN) < 0) /* allow 5 requests to queue up */ 
-    error("ERROR on listen");
+  prepare(argc, argv, &portno, &parentfd, &optval, &serveraddr, MAXCONN);
   /*==================================================================================*/
 
   /*==================================================================================*/
