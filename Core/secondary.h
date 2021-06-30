@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-typedef struct sockaddr_in S_ADDR; /* for passing sockadress in functions ()is used in prepare() */
+
 
 
 int choose_port(int argc, char **argv); /* gathers port from cli args or sets it to 80 if unspecified */
@@ -14,7 +14,7 @@ void error(char *msg); /* wrapper for perror, used for systemcalls */
 
 void cerror(FILE *stream, char *cause, char *errno, char *shortmsg, char *longmsg); /* returns an error msg to the client */
 
-int prepare(int argc, char **argv, int* portno, int* parentfd, int* optval, S_ADDR* serveraddr, int maxconn); /* prepare for main loop (set server data, bind, listen) */
+int prepare(int argc, char **argv, int* portno, int* parentfd, int* optval, struct sockaddr_in* serveraddr, int maxconn); /* prepare for main loop (set server data, bind, listen) */
 
 
 #endif

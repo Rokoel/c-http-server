@@ -9,7 +9,7 @@
 #include <arpa/inet.h>
 #include <sys/mman.h>
 
-typedef struct sockaddr_in S_ADDR; /* for passing sockadress in functions */
+
 
 int choose_port(int argc, char **argv){
     if (argc != 2) {
@@ -52,7 +52,7 @@ void cerror(FILE *stream, char *cause, char *errno, char *shortmsg, char *longms
 
 
 
-int prepare(int argc, char **argv, int* portno, int* parentfd, int* optval, S_ADDR* serveraddr, int maxconn){
+int prepare(int argc, char **argv, int* portno, int* parentfd, int* optval, struct sockaddr_in* serveraddr, int maxconn){
   /* choose a port */
   *portno = choose_port(argc, argv);
   /* open socket descriptor */
