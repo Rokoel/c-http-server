@@ -9,7 +9,7 @@
 #include <arpa/inet.h>
 #include <sys/mman.h>
 
-//typedef struct sockaddr_in S_ADDR; /* for passing sockadress in functions */
+
 
 int choose_port(int argc, char **argv){
     if (argc != 2) {

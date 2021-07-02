@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <netinet/in.h>
 
-//typedef struct sockaddr_in S_ADDR; /* for passing sockadress in functions ()is used in prepare() */
+
 
 
 int choose_port(int argc, char **argv); /* gathers port from cli args or sets it to 80 if unspecified */
