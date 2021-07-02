@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
   struct hostent *hostp; /* client host info */
   char *hostaddrp;       /* dotted decimal host addr string */
   int optval;            /* flag value for setsockopt */
-  typedef struct sockaddr_in S_ADDR;
+  //typedef struct sockaddr_in S_ADDR;
   struct sockaddr_in serveraddr; /* server's addr */
   struct sockaddr_in clientaddr; /* client addr */
 
