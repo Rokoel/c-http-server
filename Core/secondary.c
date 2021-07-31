@@ -1,87 +1,61 @@
-#include "secondary.h"
+#include "helpful.h"
+
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
-#include <sys/types.h> 
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <sys/mman.h>
+#include <string.h>
 
-typedef struct sockaddr_in S_ADDR; /* for passing sockadress in functions */
+#define FILE_OK 0
+#define FILE_DOESNOT_EXIST 1
+#define FILE_TOO_LARGE 2
+#define FILE_READ_ERROR 3
 
-int choose_port(int argc, char **argv){
-    if (argc != 2) {
-        printf("Using default port 80\n");    
-        return 80;
-    }
-    else{
-        return atoi(argv[1]);
-    }
-}
-
-char* f_to_s (char * buffer, FILE * infile){
-    long numbytes;
-    /* Get the number of bytes */
-    fseek(infile, 0L, SEEK_END);
-    numbytes = ftell(infile);
-    /* reset the file position indicator to 
-    the beginning of the file */
-    fseek(infile, 0L, SEEK_SET);
-    /* copy all the text into the buffer */
-    fread(buffer, sizeof(char), numbytes, infile);
-    return buffer;
-}
-
-void error(char *msg) {
+void error(char *msg){
   perror(msg);
   exit(1);
 }
 
-void cerror(FILE *stream, char *cause, char *errno, char *shortmsg, char *longmsg) {
-  fprintf(stream, "HTTP/1.1 %s %s\n", errno, shortmsg);
-  fprintf(stream, "Content-type: text/html\n");
-  fprintf(stream, "\n");
-  fprintf(stream, "<html><title>Tiny Error</title>");
-  fprintf(stream, "<body bgcolor=""ffffff"">\n");
-  fprintf(stream, "%s: %s\n", errno, shortmsg);
-  fprintf(stream, "<p>%s: %s\n", longmsg, cause);
-  fprintf(stream, "<hr><em>The Tiny Web server</em>\n");
+int choose_port(int argc, char **argv){
+  if (argc != 2) {
+    printf("CHOOSE_PORT: Using default port 80\n");    
+    return 80;
+  }
+  else{
+    return atoi(argv[1]);
+  }
 }
 
-
-
-int prepare(int argc, char **argv, int* portno, int* parentfd, int* optval, S_ADDR* serveraddr, int maxconn){
-  /* choose a port */
-  *portno = choose_port(argc, argv);
-  /* open socket descriptor */
-  *parentfd = socket(AF_INET, SOCK_STREAM, 0);
-  if (*parentfd < 0){
-    error("FATAL ERROR opening socket");
-    return 0; /* we don't get here */
+// someone else's implementation of reading file to a string
+char* c_read_file(const char * f_name, short * err, size_t * f_size) {
+  char * buffer;
+  size_t length;
+  FILE * f = fopen(f_name, "rb");
+  size_t read_length;
+  
+  if (f) {
+    fseek(f, 0, SEEK_END);
+    length = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (length > 1073741824) {
+      *err = FILE_TOO_LARGE;
+      return NULL;
+    }
+    buffer = (char *)malloc(length + 1);
+    if (length) {
+      read_length = fread(buffer, 1, length, f);
+      if (length != read_length) {
+        free(buffer);
+        *err = FILE_READ_ERROR;
+        return NULL;
+      }
+    }
+    fclose(f);
+    *err = FILE_OK;
+    buffer[length] = '\0';
+    *f_size = length;
   }
-  /* allows us to restart server immediately */
-  *optval = 1;
-  setsockopt(*parentfd, SOL_SOCKET, SO_REUSEADDR, (const void *)&(*optval), sizeof(int));
-
-  /* bind port to socket */
-  bzero((char *) serveraddr, sizeof(*serveraddr)); /* clear server address */
-  /* set server's data */
-  (*serveraddr).sin_family = AF_INET;
-  (*serveraddr).sin_addr.s_addr = htonl(INADDR_ANY);
-  (*serveraddr).sin_port = htons((unsigned short)(*portno));
-
-  /* bind */
-  if (bind(*parentfd, (struct sockaddr *) serveraddr, sizeof(*serveraddr)) < 0){
-    error("FATAL ERROR: binding failed");
-    return 0; /* we don't get here */
+  else {
+    *err = FILE_DOESNOT_EXIST;
+    return NULL;
   }
-
-  /* get us ready to accept connection requests, i.e. listen */
-  if (listen(*parentfd, maxconn) < 0){ /* allow maxconn requests (defined in core.c) to queue up */ 
-    error("FATAL ERROR: listening failed");
-    return 0; /* we don't get here */
-  }
-  return 1;
+  return buffer;
 }

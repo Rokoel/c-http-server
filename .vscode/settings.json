@@ -1,6 +1,10 @@
 {
     "files.associations": {
         "stdio.h": "c",
-        "stdlib.h": "c"
+        "stdlib.h": "c",
+        "inet.h": "c",
+        "string.h": "c",
+        "in.h": "c",
+        "unistd.h": "c"
     }
 }
