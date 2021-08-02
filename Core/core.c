@@ -9,7 +9,6 @@
 #include <netdb.h>
 #include <pthread.h>
 
-#define MAXERRS 16
 #define MAXCONN 100
 
 Server serv;

@@ -24,9 +24,11 @@
 #define SCRIPTS_JS "js/scripts.js"
 #define ICON_ICO   "images/icon.ico"
 
+#define MAX_ERRS 8
+
 void* process(void* sock);
-void send_response(int socket, int response_type, char *filename);
-void send_file(int socket, char *filename);
+short send_response(int socket, int response_type, char *filename);
+short send_content(int socket, char *filename, char *headers, int error_counter);
 unsigned long get_file_data(char *filename, char *content_type, int *response_code);
 int get_filename(char buffer[], char *route);
 int is_it_this_possible_route(char buffer[], char *possible_route);
@@ -40,7 +42,7 @@ void work_with_socket(int *server_descriptor){
     sock.socket_file_descriptor = accept(*server_descriptor, (struct sockaddr *) &(sock.address), &clilen);
 
     if (sock.socket_file_descriptor < 0) {
-        error("ERROR on accept");
+        error("ERROR on accept"); // should we just close socket? Or just ignore?
     }
 
     pthread_t t;
@@ -48,26 +50,37 @@ void work_with_socket(int *server_descriptor){
 }
 
 void* process(void* sock){
+    int error_flag = 0;
     int socket = *((int*)sock);
     char buffer[BUFSIZE];
     bzero(buffer, BUFSIZE-1);
     int n = read(socket, buffer, BUFSIZE-1);
     if(n < 0) {
-        error("ERROR on recv");
+        int error_flag = 1;
     }
     buffer[BUFSIZE-1] = '\0';
-
-    printf("%s\n", buffer);
-
     char filename[MAX_FILENAME_SIZE];
-    strcpy(filename, "");
+
+    if(!error_flag){
+        printf("%s\n", buffer);
+        strcpy(filename, "");
+    }
+    else{
+        printf("PROCESS: Error occured when reading from socket. I will return 404 Not Found");
+        // we just empty our buffer so it will automaticly get 404
+        // In the future if it consumes a lot of memory and/or processing power,
+        // replace it with just manually returning 404
+        bzero(buffer, BUFSIZE-1);
+        buffer[BUFSIZE-1] = '\0';
+        strcpy(filename, "");
+    }
 
     int response_code = get_filename(buffer, filename);
     printf("PROCESS: Response Code: %d\n", response_code);
 
     printf("PROCESS: Sending response...\n");
-    send_response(socket, response_code, filename);
-    printf("PROCESS: Response sent successfully!\n\n");
+    if(send_response(socket, response_code, filename) == -1) printf("PROCESS: We had errors!\n\n");
+    else printf("PROCESS: Response sent successfully!\n\n");
 
     close(socket);
     return NULL;
@@ -98,14 +111,17 @@ int get_filename(char buffer[], char *filename){
         if(strstr(buffer, "/styles.css")){
             strcat(filename, STYLES_CSS);
             is_index_html = 0;
+            response_code = 200; // this is for err404
         }
         if(strstr(buffer, "/scripts.js")){
             strcat(filename, SCRIPTS_JS);
             is_index_html = 0;
+            response_code = 200; // this is for err404
         }
         if(strstr(buffer, "/icon.ico")){
             strcat(filename, ICON_ICO);
             is_index_html = 0;
+            response_code = 200; // this is for err404
         }
         if(is_index_html == 1){
             strcat(filename, "index.html");
@@ -144,12 +160,16 @@ int is_it_this_possible_route(char buffer[], char *possible_route){
 
     if(strstr(buffer, html_route) != NULL || strstr(buffer, css_route) != NULL ||
     strstr(buffer, js_route) != NULL || strstr(buffer, ico_route) != NULL){
+        // if(strstr(buffer, html_route) != NULL && !strcmp(possible_route, "/err404")){
+        //     // it IS a possible route but we need to return 404 if only it is index.html (and not .css or .js files, in that case they will not load)
+        //     return 0;
+        // }
         return 1;
     }
     return 0;
 }
 
-void send_response(int socket, int response_code, char *filename){
+short send_response(int socket, int response_code, char *filename){
     char current_line[MAX_HEADER_LINE_SIZE];
     strcpy(current_line, "");
     char headers[MAX_HEADERS_SIZE];
@@ -179,23 +199,22 @@ void send_response(int socket, int response_code, char *filename){
             break;
         }
     }
-        strcat(headers, "Server: Rokoel WebServer\n");
-        
-        sprintf(current_line, "Content-length: %lu\n", file_size);
-        strcat(headers, current_line);
+    strcat(headers, "Server: Rokoel WebServer\n");
+    
+    sprintf(current_line, "Content-length: %lu\n", file_size);
+    strcat(headers, current_line);
 
-        sprintf(current_line, "Content-type: %s\n", content_type);
-        strcat(headers, current_line);
+    sprintf(current_line, "Content-type: %s\n", content_type);
+    strcat(headers, current_line);
 
-        printf("SEND_RESPONSE:\n");
-        printf("Response headers:\n");
-        printf("-----------------\n");
-        printf("%s", headers);
-        printf("-----------------\n");
+    printf("SEND_RESPONSE:\n");
+    printf("Response headers:\n");
+    printf("-----------------\n");
+    printf("%s", headers);
+    printf("-----------------\n");
 
-        strcat(headers, "\n"); // empty line before content
-        write(socket, headers, strlen(headers));
-        send_file(socket, filename);
+    strcat(headers, "\n"); // empty line before content
+    return send_content(socket, filename, headers, 0);
 }
 
 unsigned long get_file_data(char *filename, char *content_type, int *response_code){
@@ -223,22 +242,43 @@ unsigned long get_file_data(char *filename, char *content_type, int *response_co
     return (unsigned long)file_data.st_size;
 }
 
-void send_file(int socket, char *filename){
+short send_content(int socket, char *filename, char *headers, int error_counter){
     short err;
     size_t f_size;
     char * f_data;
     f_data = c_read_file(filename, &err, &f_size);
     if (err) {
-        // should we replace it with just closing the socket or..? We actually sended 200 OK to client so may be that's wrong(?)
-        // this can't be left for prod because it may turn off the server
-        error("Error opening file!");
+        if(error_counter < MAX_ERRS){
+            // we try a little more
+            return send_content(socket, filename, headers, error_counter+1);
+        }
+        else{
+            return -1;
+        }
     }
     else {
-        int n = write(socket, f_data, f_size);
+        int n = write(socket, headers, strlen(headers));
         if(n < 0){
-            error("Error on write!");
+            if(error_counter < MAX_ERRS){
+                // we try a little more
+                return send_content(socket, filename, headers, error_counter+1);
+            }
+            else{
+                return -1;
+            }
+        }
+        n = write(socket, f_data, f_size);
+        if(n < 0){
+            if(error_counter < MAX_ERRS){
+                // we try a little more
+                return send_content(socket, filename, headers, error_counter+1);
+            }
+            else{
+                return -1;
+            }
         }
         printf("SEND_FILE: Sended file was %d bytes.\n", n);
         free(f_data);
+        return 0;
     }
 }
