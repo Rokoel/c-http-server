@@ -18,19 +18,21 @@
 #define MAX_HEADER_LINE_SIZE 96
 #define MAX_CONTENT_TYPE_SIZE 64
 #define MAX_HEADERS_SIZE 256
+#define MAX_REQUESTED_ROUTE_SIZE 32
 
-#define NO_PAGE -1
-#define MAIN 0
-#define ABOUT 1
+#define STYLES_CSS "css/styles.css"
+#define SCRIPTS_JS "js/scripts.js"
+#define ICON_ICO   "images/icon.ico"
 
 void* process(void* sock);
-void send_response(int socket, short response_type, char *filename);
+void send_response(int socket, int response_type, char *filename);
 void send_file(int socket, char *filename);
-unsigned long get_file_data(char *filename, char *content_type);
+unsigned long get_file_data(char *filename, char *content_type, int *response_code);
 int get_filename(char buffer[], char *route);
+int is_it_this_possible_route(char buffer[], char *possible_route);
 
 
-void work_with_socket_socket(int *server_descriptor){
+void work_with_socket(int *server_descriptor){
     
     Socket sock;
     int clilen = 16; // from sizeof() (it is always the same)
@@ -60,7 +62,7 @@ void* process(void* sock){
     char filename[MAX_FILENAME_SIZE];
     strcpy(filename, "");
 
-    short response_code = get_filename(buffer, filename);
+    int response_code = get_filename(buffer, filename);
     printf("PROCESS: Response Code: %d\n", response_code);
 
     printf("PROCESS: Sending response...\n");
@@ -72,48 +74,37 @@ void* process(void* sock){
 }
 
 int get_filename(char buffer[], char *filename){
-    short what_page = NO_PAGE;
     short is_index_html = 1;
     int response_code = 200;
     strcat(filename, "../Public/Views/");
 
     /////////////////////////////// ROUTING //////////////////////////////////////
-    if(strstr(buffer, "GET / ") != NULL || strstr(buffer, "GET /css/styles.css ") != NULL ||
-        strstr(buffer, "GET /js/scripts.js ") != NULL || strstr(buffer, "GET /favicon.ico ")!= NULL ){
-        what_page = MAIN;
+    if(is_it_this_possible_route(buffer, "") ||
+    is_it_this_possible_route(buffer, "/main")){
+        strcat(filename, "main/");
     }
     
-    if(strstr(buffer, "GET /about ") || strstr(buffer, "GET /about/css/styles.css ") ||
-        strstr(buffer, "GET /about/js/scripts.js ") || strstr(buffer, "GET /about/favicon.ico ")){
-        what_page = ABOUT;
-    }
-    //////////////////////////////////////////////////////////////////////////////
-
-    switch (what_page)
-    {
-    case MAIN:
-        strcat(filename, "main/");
-        break;
-    case ABOUT:
+    else if(is_it_this_possible_route(buffer, "/about")){
         strcat(filename, "about/");
-        break;
-    default:
+    }
+
+    else{
         strcat(filename, "err404/");
         response_code = 404;
-        break;
     }
 
-    if(strstr(buffer, "GET")){
+    /////////////////////// FILES FILENAMES //////////////////////////////////////
+    if(strstr(buffer, "GET") || response_code == 404){
         if(strstr(buffer, "/styles.css")){
-            strcat(filename, "css/styles.css");
+            strcat(filename, STYLES_CSS);
             is_index_html = 0;
         }
         if(strstr(buffer, "/scripts.js")){
-            strcat(filename, "js/scripts.js");
+            strcat(filename, SCRIPTS_JS);
             is_index_html = 0;
         }
-        if(strstr(buffer, "/favicon.ico")){
-            strcat(filename, "icon.ico");
+        if(strstr(buffer, "/icon.ico")){
+            strcat(filename, ICON_ICO);
             is_index_html = 0;
         }
         if(is_index_html == 1){
@@ -126,7 +117,39 @@ int get_filename(char buffer[], char *filename){
     return response_code;
 }
 
-void send_response(int socket, short response_code, char *filename){
+int is_it_this_possible_route(char buffer[], char *possible_route){
+    char temp_bufer[MAX_REQUESTED_ROUTE_SIZE];
+
+    char html_route[MAX_REQUESTED_ROUTE_SIZE];
+    if(!strcmp(possible_route, "")){
+        // string is empty => main page
+        strcpy(html_route, "GET / ");
+    }
+    else{
+        // example result: "GET /about"
+        sprintf(html_route, "GET %s ", possible_route);
+    }
+
+    char css_route [MAX_REQUESTED_ROUTE_SIZE] = "GET %s/%s ";
+    sprintf(temp_bufer, css_route, possible_route, STYLES_CSS);
+    strcpy(css_route, temp_bufer);
+
+    char js_route  [MAX_REQUESTED_ROUTE_SIZE] = "GET %s/%s ";
+    sprintf(temp_bufer, js_route, possible_route, SCRIPTS_JS);
+    strcpy(js_route, temp_bufer);
+
+    char ico_route [MAX_REQUESTED_ROUTE_SIZE] = "GET %s/%s ";
+    sprintf(temp_bufer, ico_route, possible_route, ICON_ICO);
+    strcpy(ico_route, temp_bufer);
+
+    if(strstr(buffer, html_route) != NULL || strstr(buffer, css_route) != NULL ||
+    strstr(buffer, js_route) != NULL || strstr(buffer, ico_route) != NULL){
+        return 1;
+    }
+    return 0;
+}
+
+void send_response(int socket, int response_code, char *filename){
     char current_line[MAX_HEADER_LINE_SIZE];
     strcpy(current_line, "");
     char headers[MAX_HEADERS_SIZE];
@@ -134,7 +157,7 @@ void send_response(int socket, short response_code, char *filename){
 
     char content_type[MAX_CONTENT_TYPE_SIZE];
     strcpy(content_type, "");
-    unsigned long file_size = get_file_data(filename, content_type);
+    unsigned long file_size = get_file_data(filename, content_type, &response_code);
 
     switch (response_code){
         case 200:
@@ -170,15 +193,17 @@ void send_response(int socket, short response_code, char *filename){
         printf("%s", headers);
         printf("-----------------\n");
 
-        strcat(headers, "\n\r\n"); // empty line before content
+        strcat(headers, "\n"); // empty line before content
         write(socket, headers, strlen(headers));
         send_file(socket, filename);
 }
 
-unsigned long get_file_data(char *filename, char *content_type){
+unsigned long get_file_data(char *filename, char *content_type, int *response_code){
     struct stat file_data;
     if (stat(filename, &file_data) < 0) { // that basicly can't happen but it should be replaced for prod
-        error("404 FileNotFound Error");
+        *response_code = 404;
+        strcpy(filename, "../Public/Views/err404/index.html");
+        return get_file_data(filename, content_type, response_code);
     }
     if (strstr(filename, ".html"))
         strcpy(content_type, "text/html");
@@ -209,7 +234,11 @@ void send_file(int socket, char *filename){
         error("Error opening file!");
     }
     else {
-        write(socket, f_data, f_size);
+        int n = write(socket, f_data, f_size);
+        if(n < 0){
+            error("Error on write!");
+        }
+        printf("SEND_FILE: Sended file was %d bytes.\n", n);
         free(f_data);
     }
 }

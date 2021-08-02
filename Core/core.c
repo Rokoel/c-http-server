@@ -20,6 +20,6 @@ int main(int argc, char **argv) {
   printf("MAIN: Waiting for connetions...\n\n");
   
   while (1){
-    work_with_socket_socket(&(serv.server_file_descriptor));
+    work_with_socket(&(serv.server_file_descriptor));
   }
 }

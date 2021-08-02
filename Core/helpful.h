@@ -22,7 +22,7 @@ typedef struct Socket{
     int socket_file_descriptor;
     struct sockaddr_in address;
 } Socket;
-void work_with_socket_socket(int *server_descriptor);
+void work_with_socket(int *server_descriptor);
 
 void error(char *msg);
 
