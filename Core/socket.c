@@ -50,17 +50,23 @@ void work_with_socket(int *server_descriptor){
 }
 
 void* process(void* sock){
-    int error_flag = 0;
+    int error_flag = 0, n;
     int socket = *((int*)sock);
     char buffer[BUFSIZE];
     bzero(buffer, BUFSIZE-1);
-    int n = read(socket, buffer, BUFSIZE-1);
-    if(n < 0) {
-        int error_flag = 1;
+    while (error_flag < MAX_ERRS){
+        n = read(socket, buffer, BUFSIZE-1);
+        if(n < 0){
+            error_flag++;
+        }
+        else{
+            error_flag = 0;
+            break;
+        }
     }
     buffer[BUFSIZE-1] = '\0';
     char filename[MAX_FILENAME_SIZE];
-
+    
     if(!error_flag){
         printf("%s\n", buffer);
         strcpy(filename, "");
@@ -123,6 +129,16 @@ int get_filename(char buffer[], char *filename){
             is_index_html = 0;
             response_code = 200; // this is for err404
         }
+        if(strstr(buffer, "/beginning.webm") && strstr(filename, "main/")){
+            strcat(filename, "videos/beginning.webm");
+            is_index_html = 0;
+            response_code = 200; // this is for err404
+        }
+        if(strstr(buffer, "/beginning_img.png") && strstr(filename, "main/")){
+            strcat(filename, "images/beginning_img.png");
+            is_index_html = 0;
+            response_code = 200; // this is for err404
+        }
         if(is_index_html == 1){
             strcat(filename, "index.html");
         }
@@ -158,12 +174,17 @@ int is_it_this_possible_route(char buffer[], char *possible_route){
     sprintf(temp_bufer, ico_route, possible_route, ICON_ICO);
     strcpy(ico_route, temp_bufer);
 
+    char beginning_image_route [MAX_REQUESTED_ROUTE_SIZE] = "GET %s/%s ";
+    sprintf(temp_bufer, beginning_image_route, possible_route, "images/beginning_img.png");
+    strcpy(beginning_image_route, temp_bufer);
+
+    char video_route [MAX_REQUESTED_ROUTE_SIZE] = "GET %s/%s ";
+    sprintf(temp_bufer, video_route, possible_route, "videos/beginning.webm");
+    strcpy(video_route, temp_bufer);
+
     if(strstr(buffer, html_route) != NULL || strstr(buffer, css_route) != NULL ||
-    strstr(buffer, js_route) != NULL || strstr(buffer, ico_route) != NULL){
-        // if(strstr(buffer, html_route) != NULL && !strcmp(possible_route, "/err404")){
-        //     // it IS a possible route but we need to return 404 if only it is index.html (and not .css or .js files, in that case they will not load)
-        //     return 0;
-        // }
+    strstr(buffer, js_route) != NULL || strstr(buffer, ico_route) != NULL ||
+    strstr(buffer, video_route) != NULL || strstr(buffer, beginning_image_route) != NULL){
         return 1;
     }
     return 0;
@@ -230,12 +251,16 @@ unsigned long get_file_data(char *filename, char *content_type, int *response_co
         strcpy(content_type, "image/gif");
     else if (strstr(filename, ".jpg"))
         strcpy(content_type, "image/jpg");
+    else if (strstr(filename, ".png"))
+        strcpy(content_type, "image/png");
     else if (strstr(filename, ".css"))
         strcpy(content_type, "text/css");
     else if (strstr(filename, ".js"))
         strcpy(content_type, "text/javascript");
     else if (strstr(filename, ".ico"))
         strcpy(content_type, "image/x-icon");
+    else if (strstr(filename, ".webm"))
+        strcpy(content_type, "video/webm");
     else 
         strcpy(content_type, "text/plain");
 
