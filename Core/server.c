@@ -13,6 +13,11 @@ int setup(struct Server *serv, int port, int maximum_of_connections){
     if ((*serv).server_file_descriptor < 0) {
         error("ERROR opening socket");
     }
+
+    // Fixes Address already in use problem (is it safe to use? may it cause more problems?)
+    int optval = 1;
+    if (setsockopt((*serv).server_file_descriptor, SOL_SOCKET, SO_REUSEADDR, (const void *)&optval, sizeof(int)) < 0)
+        return -1;
     
     // Initialize socket structure
     bzero((char *) &((*serv).address), sizeof((*serv).address));
