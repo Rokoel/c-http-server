@@ -1,19 +1,14 @@
 #include "helpful.h"
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <sys/socket.h>
-#include <string.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <netdb.h>
-#include <pthread.h>
+#include <signal.h>
 
 #define MAXCONN 100
 
 Server serv;
 
 int main(int argc, char **argv) {
+  signal(SIGPIPE, SIG_IGN); // for not doing anything when write or read breaks
   int port = setup(&serv, choose_port(argc, argv), MAXCONN);
   printf("MAIN: Server started on port %d\n", port);
   printf("MAIN: Waiting for connetions...\n\n");

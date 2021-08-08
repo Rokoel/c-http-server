@@ -11,7 +11,7 @@
 
 void error(char *msg){
   perror(msg);
-  exit(1);
+  //exit(1); nope
 }
 
 int choose_port(int argc, char **argv){

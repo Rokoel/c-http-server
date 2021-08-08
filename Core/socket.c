@@ -57,18 +57,17 @@ void* process(void* sock){
     int socket = *((int*)sock);
     char buffer[BUFSIZE];
     bzero(buffer, BUFSIZE-1);
-    do{
-        n = read(socket, buffer, BUFSIZE-1);
-        if(n < 0){
-            error_flag = 1;
-        }
-    } while (n > 0);
+    n = read(socket, buffer, BUFSIZE-1);
+    printf("READ: %d\n", n);
+    if(n < 0){
+        error_flag = 1;
+    }
 
     buffer[BUFSIZE-1] = '\0';
     char filename[MAX_FILENAME_SIZE];
     
     if(!error_flag){
-        printf("%s\n", buffer);
+        printf("BUFFER: %s\n", buffer);
         strcpy(filename, "");
     }
     else{
@@ -306,11 +305,13 @@ short send_content(int socket, char *filename, char *headers, int error_counter)
         int n = write(socket, headers, strlen(headers));
         if(n < 0){
             printf("SEND_CONTENT: 1-st write error\n");
+            printf("Write2: %d", n);
             // what should we do?
         }
         n = write(socket, f_data, f_size);
         if(n < 0){
             printf("SEND_CONTENT: 2-nd write error\n");
+            printf("WRITE2: %d", n);
             // what should we do?
         }
         printf("SEND_CONTENT: Sended file was %d bytes.\n", n);
