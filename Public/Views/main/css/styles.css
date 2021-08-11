@@ -2,14 +2,12 @@ html {
   --scrollbarBG: rgba(250, 249, 245, 1);
   --thumbBG: black;
   scrollbar-color: var(--thumbBG) var(--scrollbarBG);
-
   scrollbar-width: none;
   -ms-overflow-style: none;
   overflow-y: auto;
   overflow-x: hidden;
   scroll-behavior: smooth;
 }
-
 body {
   font-family: ubuntu, sans-serif;
   padding: 0;
@@ -22,14 +20,6 @@ body::-webkit-scrollbar {
   width: 11px;
   color: white;
   display: none;
-}
-body::-webkit-scrollbar-track {
-  background: var(--scrollbarBG);
-}
-body::-webkit-scrollbar-thumb {
-  background-color: var(--thumbBG);
-  border-radius: 6px;
-  border: 3px solid var(--scrollbarBG);
 }
 
 div#hidden-header-bg {
@@ -44,7 +34,6 @@ div#hidden-header-bg {
   z-index: 2;
   visibility: hidden;
 }
-
 div#header {
   display: flex;
   position: fixed;
@@ -76,6 +65,13 @@ div.text-holder-huge {
   justify-content: center;
 }
 
+.no-text-selection {
+  -webkit-user-select: none; /* Safari */        
+  -moz-user-select: none; /* Firefox */
+  -ms-user-select: none; /* IE10+/Edge */
+  user-select: none; /* Standard */
+}
+
 div.text-holder {
   width: 100vw;
   display: block;
@@ -91,7 +87,20 @@ h1, h2, h3, h4, h5 {
   text-align: center;
 }
 
-a, a h4 {
+.xx-large-font {
+  font-size: xx-large;
+}
+
+.x-large-font {
+  font-size: x-large;
+}
+
+.large-font {
+  font-size: large;
+}
+
+a {
+  font-size: large;
   display: inline;
   text-align: center;
   padding-left: 5%;
@@ -121,7 +130,7 @@ p {
   width: 100vw;
   height: 100vh;
   display: block;
-  margin: auto;
+  margin: 0 auto;
 }
 
 .video-bg::before {
@@ -131,7 +140,7 @@ p {
   bottom: 0;
   left: 0;
   content: '';
-  background-color: rgba(0,0,0,0.4);
+  background-color: rgba(0,0,0,0.6);
   z-index: 1;
 }
 
@@ -141,10 +150,11 @@ video {
   height: 100vh;
   display: block;
   margin: 0 auto;
+  margin-right: 500px;
 }
 
 p {
-  font-size: 150%;
+  font-size: x-large;
   color: white;
   display: inline-block;
   margin-left: min(20%, 150px);

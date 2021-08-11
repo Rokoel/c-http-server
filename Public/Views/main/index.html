@@ -22,32 +22,43 @@
 
 <body>
   <div id="hidden-header-bg"></div>
-  <div id="header">
+  <div id="header" class="no-text-selection">
     <a href="#">Информация</a>
     <a href="#">Правила</a>
     <a href="#">Админам серверов</a>
   </div>
 
-  <div class="section" id="first-video">
+  <div class="section no-text-selection" id="first-video">
     <div class="video-container">
       <div class="video-bg"></div>
       <video autoplay muted loop poster="images/beginning_img.png">
-        Ваш браузер не поддерживает видео тэг.
         <source src="videos/beginning.webm" type="video/webm">
+        <source src="videos/beginning.mp4" type="video/mp4">
+        Ваш браузер не поддерживает видео-тэг.
       </video>
+      <audio autoplay loop id="rain">
+        <source src="audios/rain-sounds.mp3" type="audio/mp3">
+        <source src="audios/rain-sounds.wav" type="audio/wav">
+        Ваш браузер не поддерживает аудио-тэг.
+      </audio>
+      <audio autoplay loop id="campfire">
+        <source src="audios/campfire-sounds.mp3" type="audio/mp3">
+        <source src="audios/campfire-sounds.wav" type="audio/wav">
+        Ваш браузер не поддерживает аудио-тэг.
+      </audio>
     </div>
-    <div class="text-holder-huge">
+    <div class="text-holder-huge x-large-font">
       <h1 class="text-align-center">
-        Бесплатный приватный сервер
+        Environ - бесплатный приватный сервер
       </h1>
       <h2 class="text-align-center">
-        на версии 1.17
+        Ванилла 1.16+
       </h2>
     </div>
   </div>
 
   <div class="section margin-vertical-section" id="first-section">
-    <h1 class="text-align-center">Simple Heading! Yaay!</h1>
+    <h1 class="text-align-center xx-large-font">Simple Heading! Yaay!</h1>
     <p class="margin-vertical">
       Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, 
       totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae 
@@ -75,7 +86,7 @@
   </div>
   
   <div class="section margin-vertical-section" id="second-section">
-    <h1 class="text-align-center">Simple Second Heading! YaayX2!</h1>
+    <h1 class="text-align-center xx-large-font">Simple Second Heading! YaayX2!</h1>
     <p class="margin-vertical">
       Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, 
       totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae 
@@ -104,7 +115,7 @@
   
   <hr class="margin-vertical big">
 
-  <div class="section margin-vertical-section" id="footer">
+  <div class="section margin-vertical-section no-text-selection" id="footer">
     <div class="footer-holder">
       <div class="links-footer-holder">
         <a href="#">Контакты</a>
