@@ -13,6 +13,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include <fcntl.h>
+#include <errno.h>
+
 
 #define BUFSIZE 1024
 #define MAX_FILENAME_SIZE 64
@@ -44,41 +47,48 @@ void work_with_socket(int *server_descriptor){
 
     sock.socket_file_descriptor = accept(*server_descriptor, (struct sockaddr *) &(sock.address), &clilen);
 
-    if (sock.socket_file_descriptor < 0) {
-        error("ERROR on accept"); // should we just close socket? Or just ignore?
+    if (sock.socket_file_descriptor == -1) {
+        if (errno == EWOULDBLOCK) {
+            sleep(0.5); // 17% cpu usage when 0.5 and 95+% when 0 and <17% when > 0.5
+            // affects respponsivness of the site (kind of delay between requests)
+        } else {
+            perror("error when accepting connection");
+        }
     }
-
-    pthread_t t;
-    pthread_create(&t, NULL, process, &(sock.socket_file_descriptor));
+    else {
+        // we better do that or else we were reusing one variable... Anyway, that is a reasonable fix from stack overflow (I don't understand it fully)
+        // link to the fix https://stackoverflow.com/questions/30756210/unable-to-receive-data-after-connection-getting-bad-file-descriptor-error
+        int *pconnfd = malloc(sizeof *pconnfd);
+        if (NULL == pconnfd);
+        *pconnfd = sock.socket_file_descriptor;
+        pthread_t t;
+        pthread_create(&t, NULL, process, pconnfd);
+    }
 }
 
 void* process(void* sock){
     int error_flag = 0, n;
     int socket = *((int*)sock);
+    free(sock);
     char buffer[BUFSIZE];
     bzero(buffer, BUFSIZE-1);
     n = read(socket, buffer, BUFSIZE-1);
     printf("READ: %d\n", n);
-    if(n < 0){
-        error_flag = 1;
+    if(n == -1){
+        if(errno == EWOULDBLOCK){
+            while(n == -1 && errno == EWOULDBLOCK){
+                n = read(socket, buffer, BUFSIZE-1);
+                printf("READ: %d\n", n);
+            }
+        }
+        else{perror(strerror(errno));}
     }
+    printf("SUCCESSFULLY READ: %d\n", n);
 
     buffer[BUFSIZE-1] = '\0';
     char filename[MAX_FILENAME_SIZE];
-    
-    if(!error_flag){
-        printf("BUFFER: %s\n", buffer);
-        strcpy(filename, "");
-    }
-    else{
-        printf("PROCESS: Error occured when reading from socket. I will return 404 Not Found\n");
-        // we just empty our buffer so it will automaticly get 404
-        // In the future if it consumes a lot of memory and/or processing power,
-        // replace it with just manually returning 404
-        bzero(buffer, BUFSIZE-1);
-        buffer[BUFSIZE-1] = '\0';
-        strcpy(filename, "");
-    }
+    printf("BUFFER: %s\n", buffer);
+    strcpy(filename, "");
 
     int response_code = get_filename(buffer, filename);
     printf("PROCESS: Response Code: %d\n", response_code);
@@ -88,7 +98,7 @@ void* process(void* sock){
     else printf("PROCESS: Response sent successfully!\n\n");
 
     close(socket);
-    return NULL;
+    pthread_exit(0);
 }
 
 int get_filename(char buffer[], char *filename){
@@ -286,6 +296,12 @@ unsigned long get_file_data(char *filename, char *content_type, int *response_co
         strcpy(content_type, "image/x-icon");
     else if (strstr(filename, ".webm"))
         strcpy(content_type, "video/webm");
+    else if (strstr(filename, ".mp4"))
+        strcpy(content_type, "video/mp4");
+    else if (strstr(filename, ".mp3"))
+        strcpy(content_type, "audio/mp3");
+    else if (strstr(filename, ".wav"))
+        strcpy(content_type, "audio/wav");
     else 
         strcpy(content_type, "text/plain");
 
@@ -303,16 +319,32 @@ short send_content(int socket, char *filename, char *headers, int error_counter)
     }
     else {
         int n = write(socket, headers, strlen(headers));
-        if(n < 0){
-            printf("SEND_CONTENT: 1-st write error\n");
-            printf("Write2: %d", n);
-            // what should we do?
+        if(n == -1){
+            if(errno == EWOULDBLOCK){
+                while(n == -1 && errno == EWOULDBLOCK){
+                    n = write(socket, headers, strlen(headers));
+                    printf("WRITE1: %d\n", n);
+                }
+            }
+            else{
+                printf("SEND_CONTENT: 1-st write error\n");
+                printf("Write1: %d", n);
+                // what should we do?
+            }
         }
         n = write(socket, f_data, f_size);
-        if(n < 0){
-            printf("SEND_CONTENT: 2-nd write error\n");
-            printf("WRITE2: %d", n);
-            // what should we do?
+        if(n == -1){
+            if(errno == EWOULDBLOCK){
+                while(n == -1 && errno == EWOULDBLOCK){
+                    n = write(socket, f_data, f_size);
+                    printf("WRITE2: %d\n", n);
+                }
+            }
+            else{
+                printf("SEND_CONTENT: 2-nd write error\n");
+                printf("Write2: %d", n);
+                // what should we do?
+            }
         }
         printf("SEND_CONTENT: Sended file was %d bytes.\n", n);
         free(f_data);

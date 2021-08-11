@@ -8,6 +8,8 @@
 #include <string.h>
 #include <fcntl.h>
 
+#include <fcntl.h>
+
 int setup(struct Server *serv, int port, int maximum_of_connections){
     // Open a socket
     (*serv).server_file_descriptor = socket(AF_INET, SOCK_STREAM, 0);
@@ -23,15 +25,15 @@ int setup(struct Server *serv, int port, int maximum_of_connections){
         exit(1);
     }
     
-    // int flags = fcntl((*serv).server_file_descriptor, F_GETFL);
-    // if(flags == -1){
-    //     perror("Error on getting flags on TCP listening socket");
-    //     exit(1);
-    // }
-    // if (fcntl((*serv).server_file_descriptor, F_SETFL, flags | O_NONBLOCK) == -1){
-    //     perror("Error on setting TCP listening socket to be non-blocking");
-    //     exit(1);
-    // }
+    int flags = fcntl((*serv).server_file_descriptor, F_GETFL);
+    if(flags == -1){
+        perror("Error on getting flags on TCP listening socket");
+        exit(1);
+    }
+    if (fcntl((*serv).server_file_descriptor, F_SETFL, flags | O_NONBLOCK) == -1){
+        perror("Error on setting TCP listening socket to be non-blocking");
+        exit(1);
+    }
     
     // Initialize socket structure
     bzero((char *) &((*serv).address), sizeof((*serv).address));
