@@ -41,6 +41,11 @@ int is_it_this_possible_route(char buffer[], char *possible_route, char *actual_
 int get_file(char buffer[], char *file);
 int check_route(char buffer[], char route_to_check[], char* possible_route, char *actual_route);
 
+/*
+TODO:
+- Refactoring
+*/
+
 void work_with_socket(int *server_descriptor){
     Socket sock;
     int clilen = 16; // from sizeof() (it is always the same)
@@ -51,6 +56,7 @@ void work_with_socket(int *server_descriptor){
         if (errno == EWOULDBLOCK) {
             sleep(0.5); // 17% cpu usage when 0.5 and 95+% when 0 and <17% when > 0.5
             // affects respponsivness of the site (kind of delay between requests)
+            // okay results are waaaay better than this^ but more testing is needed
         } else {
             perror("error when accepting connection");
         }

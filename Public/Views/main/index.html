@@ -27,25 +27,27 @@
     <a href="#">Правила</a>
     <a href="#">Админам серверов</a>
   </div>
-
+  <div class="empty-fullscreen-block"></div>
   <div class="section no-text-selection" id="first-video">
+    <div class="video-bg"></div>
     <div class="video-container">
-      <div class="video-bg"></div>
-      <video autoplay muted loop poster="images/beginning_img.png">
-        <source src="videos/beginning.webm" type="video/webm">
-        <source src="videos/beginning.mp4" type="video/mp4">
-        Ваш браузер не поддерживает видео-тэг.
-      </video>
-      <audio autoplay loop id="rain">
+      <div class="videoBgWrapper">
+        <video autoplay muted loop poster="images/beginning_img.png" class="videoBg">
+          <source src="videos/beginning.webm" type="video/webm">
+          <source src="videos/beginning.mp4" type="video/mp4">
+          Ваш браузер не поддерживает видео-тэг.
+        </video>
+      </div>
+      <!-- <audio autoplay muted loop id="rain">
         <source src="audios/rain-sounds.mp3" type="audio/mp3">
         <source src="audios/rain-sounds.wav" type="audio/wav">
         Ваш браузер не поддерживает аудио-тэг.
       </audio>
-      <audio autoplay loop id="campfire">
+      <audio autoplay muted loop id="campfire">
         <source src="audios/campfire-sounds.mp3" type="audio/mp3">
         <source src="audios/campfire-sounds.wav" type="audio/wav">
         Ваш браузер не поддерживает аудио-тэг.
-      </audio>
+      </audio> -->
     </div>
     <div class="text-holder-huge x-large-font">
       <h1 class="text-align-center">
@@ -53,6 +55,9 @@
       </h1>
       <h2 class="text-align-center">
         Ванилла 1.16+
+      </h2>
+      <h2 class="text-align-center floating letter-spacing-0" id="scroller-1" style="font-size: 120%">
+        ▼
       </h2>
     </div>
   </div>
