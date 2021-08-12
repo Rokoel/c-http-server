@@ -23,6 +23,7 @@
 #define MAX_CONTENT_TYPE_SIZE 64
 #define MAX_HEADERS_SIZE 256
 #define MAX_REQUESTED_ROUTE_SIZE 32
+#define MAX_POSSIBLE_ROUTE_SIZE 34 // !important - MAX_REQUESTED_ROUTE_SIZE + 2 always
 
 #define CSS     "css/"
 #define JS      "js/"
@@ -114,26 +115,26 @@ int get_filename(char buffer[], char *filename){
     strcat(filename, "../Public/Views/");
 
     /////////////////////////////// ROUTING //////////////////////////////////////
-    if(is_it_this_possible_route(buffer, "/", route)){
-        strcat(filename, "main/");
+    if(is_it_this_possible_route(buffer, "", route)){
+        strcat(filename, "main");
     }
 
-    else if(is_it_this_possible_route(buffer, "/main",  route)){
-        strcat(filename, "main/");
+    else if(is_it_this_possible_route(buffer, "main",  route)){
+        strcat(filename, "main");
     }
     
-    else if(is_it_this_possible_route(buffer, "/about", route)){
-        strcat(filename, "about/");
+    else if(is_it_this_possible_route(buffer, "about", route)){
+        strcat(filename, "about");
     }
 
     else{
-        if (!is_it_this_possible_route(buffer, "/err404", route)){
-            is_404 = 1;
+        if (!is_it_this_possible_route(buffer, "err404", route)){
+            is_404 = 1; // is it err404 index.html specifically
         }
         response_code = 404;
-        strcat(filename, "err404/");
+        strcat(filename, "err404");
     }
-
+    strcat(filename, "/");
     if(!is_404){
         strcat(filename, route);
     }
@@ -199,11 +200,12 @@ int get_file(char buffer[], char *file){
     return 1; // if nothing is found, it is index html or 404 html
 }
 
-int is_it_this_possible_route(char buffer[], char *possible_route, char *actual_route){
+int is_it_this_possible_route(char buffer[], char *poss_route, char *actual_route){
+    char possible_route[MAX_REQUESTED_ROUTE_SIZE] = "";
+    sprintf(possible_route, "%c%s", '/', poss_route);
     int is_route = 0;
-    char temp_bufer[MAX_REQUESTED_ROUTE_SIZE];
 
-    char html_route[MAX_REQUESTED_ROUTE_SIZE];
+    char html_route[MAX_POSSIBLE_ROUTE_SIZE];
     if(!strcmp(possible_route, "/")) strcpy(html_route, "GET / ");
     else sprintf(html_route, " %s ", possible_route);
     if(strstr(buffer, html_route) != NULL){
@@ -221,7 +223,7 @@ int is_it_this_possible_route(char buffer[], char *possible_route, char *actual_
 }
 
 int check_route(char buffer[], char route_to_check[], char* possible_route, char *actual_route){
-    char temp_bufer[MAX_REQUESTED_ROUTE_SIZE];
+    char temp_bufer[MAX_POSSIBLE_ROUTE_SIZE];
     if(!strcmp(possible_route, "/") || !strcmp(possible_route, "/main"))
         sprintf(temp_bufer, " /%s", route_to_check);
     else
