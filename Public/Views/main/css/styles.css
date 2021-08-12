@@ -93,7 +93,7 @@ div.text-holder-header {
   align-content: center;
   justify-content: center;
 }
-#scroller-1:hover {
+.be-pointed:hover {
   cursor: pointer;
 }
 @keyframes float {
@@ -116,7 +116,6 @@ div.text-holder-header {
 a {
   font-size: large;
   display: inline;
-  text-align: center;
   padding-left: 5%;
   padding-right: 5%;
   text-decoration: none;
@@ -198,6 +197,7 @@ hr.big {
 .footer-holder {
   display: flex;
   flex-direction: row;
+  flex-wrap: wrap;
   justify-content: space-evenly;
 }
 .links-holder {
@@ -207,15 +207,27 @@ hr.big {
   padding-top: 1em;
   padding-bottom: 1em;
 }
-.copyright-holder {
+.vertical-center {
   display: flex;
   flex-direction: column;
   justify-content: center;
+}
+.x-small-image {
+  max-width: 64px;
+  max-height: 64px;
+}
+.round-image {
+  border-radius: 50%;
 }
 .links-margin {
   margin-top: 0.5em;
   margin-bottom: 0.5em;
   padding-left: 1em;
   padding-right: 1em;
+}
+
+.margin-horizontal {
+  margin-left: 1rem;
+  margin-right: 1rem;
 }
 /* -------------------------------- */
