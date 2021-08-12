@@ -118,22 +118,37 @@ int get_filename(char buffer[], char *filename){
     if(is_it_this_possible_route(buffer, "", route)){
         strcat(filename, "main");
     }
-
     else if(is_it_this_possible_route(buffer, "main",  route)){
         strcat(filename, "main");
     }
-    
     else if(is_it_this_possible_route(buffer, "about", route)){
         strcat(filename, "about");
     }
-
-    else{
-        if (!is_it_this_possible_route(buffer, "err404", route)){
-            is_404 = 1; // is it err404 index.html specifically
-        }
-        response_code = 404;
+    else if(is_it_this_possible_route(buffer, "contacts", route)){
+        strcat(filename, "contacts");
+    }
+    else if(is_it_this_possible_route(buffer, "for_admins", route)){
+        strcat(filename, "for_admins");
+    }
+    else if(is_it_this_possible_route(buffer, "information", route)){
+        strcat(filename, "information");
+    }
+    else if(is_it_this_possible_route(buffer, "rules", route)){
+        strcat(filename, "rules");
+    }
+    else if(is_it_this_possible_route(buffer, "privacy_policy", route)){
+        strcat(filename, "privacy_policy");
+    }
+    else if(is_it_this_possible_route(buffer, "err404", route)){
+        response_code = 200;
         strcat(filename, "err404");
     }
+    else {
+        response_code = 404;
+        strcat(filename, "err404");
+        is_404 = 1;
+    }
+
     strcat(filename, "/");
     if(!is_404){
         strcat(filename, route);
@@ -204,6 +219,8 @@ int is_it_this_possible_route(char buffer[], char *poss_route, char *actual_rout
     char possible_route[MAX_REQUESTED_ROUTE_SIZE] = "";
     sprintf(possible_route, "%c%s", '/', poss_route);
     int is_route = 0;
+    printf("POSSIBLE_ROUTE in is_it_this_possible_route: %s\n", possible_route);
+    printf("BUFFER in is_it_this_possible_route: %s\n", buffer);
 
     char html_route[MAX_POSSIBLE_ROUTE_SIZE];
     if(!strcmp(possible_route, "/")) strcpy(html_route, "GET / ");
@@ -219,6 +236,7 @@ int is_it_this_possible_route(char buffer[], char *poss_route, char *actual_rout
     is_route += check_route(buffer, VIDEOS, possible_route, actual_route);
     is_route += check_route(buffer, AUDIOS, possible_route, actual_route);
 
+    printf("ACTUAL_ROUTE in is_it_this_possible_route: %s\n", actual_route);
     return is_route;
 }
 
@@ -288,9 +306,10 @@ short send_response(int socket, int response_code, char *filename){
 
 unsigned long get_file_data(char *filename, char *content_type, int *response_code){
     struct stat file_data;
-    if (stat(filename, &file_data) < 0) { // that basicly can't happen but it should be replaced for prod
+    if (stat(filename, &file_data) < 0) { // filename is based by us so it is impossible to use it badly
         *response_code = 404;
         strcpy(filename, "../Public/Views/err404/index.html");
+        printf("GET_FILE_DATA -> 404\n");
         return get_file_data(filename, content_type, response_code);
     }
     if (strstr(filename, ".html"))
