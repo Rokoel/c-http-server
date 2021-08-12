@@ -108,7 +108,7 @@ void* process(void* sock){
 }
 
 int get_filename(char buffer[], char *filename){
-    short is_index_html = 1;
+    short is_index_html, is_404 = 0;
     int response_code = 200;
     char route[MAX_REQUESTED_ROUTE_SIZE] = "";
     strcat(filename, "../Public/Views/");
@@ -127,17 +127,22 @@ int get_filename(char buffer[], char *filename){
     }
 
     else{
-        strcat(filename, "err404/");
+        if (!is_it_this_possible_route(buffer, "/err404", route)){
+            is_404 = 1;
+        }
         response_code = 404;
+        strcat(filename, "err404/");
     }
 
-    strcat(filename, route);
+    if(!is_404){
+        strcat(filename, route);
+    }
 
     /////////////////////// FILES FILENAMES //////////////////////////////////////
     if(strstr(buffer, "GET") || response_code == 404){
-        if(response_code != 404){
-            char file[MAX_FILENAME_SIZE];
-            is_index_html = get_file(buffer, file);
+        char file[MAX_FILENAME_SIZE];
+        is_index_html = get_file(buffer, file);
+        if(is_index_html == 0){
             strcat(filename, file);
             response_code = 200;
         }

@@ -1,0 +1,241 @@
+/* -------- GLOBAL STYLING -------- */
+html {
+  /* no-scrollbar */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+
+  /* smooth scrolling */
+  scroll-behavior: smooth;
+}
+body {
+  /* fonts */
+  font-family: ubuntu, sans-serif;
+  
+  /* for consistency */
+  padding: 0;
+  margin: 0;
+
+  /* bg-color */
+  background-color: black;
+
+  /* no-scrollbar */
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+body::-webkit-scrollbar {
+  /* no-scrollbar */
+  display: none;
+}
+.text-selection-none {
+  -webkit-user-select: none; /* Safari */
+  -moz-user-select: none; /* Firefox */
+  -ms-user-select: none; /* IE10+/Edge */
+  user-select: none; /* Standard */
+}
+h1, h2, h2 a, h2 a:hover, h3, h4, h5 {
+  display: block;
+  color: white;
+  z-index: 1;
+  padding-left: 5%;
+  padding-right: 5%;
+}
+
+/* useful classes-properties */
+.text-align-center {
+  text-align: center;
+}
+.xx-large-font {
+  font-size: xx-large;
+}
+.x-large-font {
+  font-size: x-large;
+}
+.large-font {
+  font-size: large;
+}
+/* -------------------------------- */
+
+/* -------- HEADER STYLING -------- */
+div#hidden-header-bg {
+  position: fixed;
+  top: 0em;
+  width: 100%;
+  height: 3rem;
+  background-color: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(3px);
+  left: 0;
+  right: 0;
+  z-index: 2;
+  visibility: hidden;
+}
+div#header {
+  display: flex;
+  position: fixed;
+  top: 0em;
+  flex-flow: row wrap;
+  align-items: center;
+  align-content: center;
+  justify-content: center;
+  margin: 1rem;
+  left: 0;
+  right: 0;
+  z-index: 3;
+}
+div.text-holder-header {
+  width: 100vw;
+  height: 100vh;
+  top: 0;
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  align-content: center;
+  justify-content: center;
+}
+.be-pointed:hover {
+  cursor: pointer;
+}
+@keyframes float {
+	0% {
+		transform: translatey(0px);
+	}
+	50% {
+		transform: translatey(-20px);
+	}
+	100% {
+		transform: translatey(0px);
+	}
+}
+.floating {
+  animation: float 2s ease-in-out infinite;
+}
+/* -------------------------------- */
+
+/* -------- LINKS STYLING --------- */
+a {
+  font-size: large;
+  display: inline;
+  padding-left: 5%;
+  padding-right: 5%;
+  text-decoration: none;
+  color: rgba(196, 196, 196, 0.5);
+}
+a:hover {
+  color: rgba(250, 250, 255, 0.5);
+}
+a:focus, a:active {
+  color: white;
+}
+.link-in-text {
+  padding: 0;
+}
+/* -------------------------------- */
+
+/* -------- VIDEO STYLING --------- */
+.video-container {
+  width: 100vw;
+  height: 100vh;
+  display: block;
+  margin: 0 auto;
+}
+.video-bg::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  content: '';
+  background-color: rgba(0,0,0,0.6);
+  z-index: 1;
+}
+video {
+  object-fit: cover;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+  margin: 0 auto;
+}
+/* -------------------------------- */
+
+/* --------- TEXT STYLING --------- */
+div.section {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.margin-vertical-section {
+  margin-top: 3rem;
+  margin-bottom: 3rem;
+}
+.margin-vertical {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+.margin-vertical-huge {
+  margin-top: max(10%, 5rem);
+}
+p {
+  font-size: x-large;
+  color: white;
+  display: inline-block;
+  margin-left: min(20%, 150px);
+  margin-right: min(20%, 150px);
+  line-height: 150%;
+  letter-spacing: 0.1rem;
+}
+/* -------------------------------- */
+
+/* -------- FOOTER STYLING -------- */
+hr.small {
+  width: 80%;
+  height: 1px;
+  border: 0;
+  background-color: rgba(250, 250, 255, 0.5);
+  color: rgba(250, 250, 255, 0.5);
+}
+hr.big {
+  width: 90%;
+  height: 1px;
+  border: 0;
+  background-color: rgba(196, 196, 196, 0.5);
+  color: rgba(196, 196, 196, 0.5);
+}
+.footer-holder {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: space-evenly;
+}
+.links-holder {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding-top: 1em;
+  padding-bottom: 1em;
+}
+.vertical-center {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.x-small-image {
+  max-width: 64px;
+  max-height: 64px;
+}
+.round-image {
+  border-radius: 50%;
+}
+.links-margin {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  padding-left: 1em;
+  padding-right: 1em;
+}
+.margin-horizontal {
+  margin-left: 1rem;
+  margin-right: 1rem;
+}
+/* -------------------------------- */
