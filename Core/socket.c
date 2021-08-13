@@ -90,6 +90,10 @@ void* process(void* sock){
         }
         else{perror(strerror(errno));}
     }
+    if(n == 0){
+        close(socket);
+        pthread_exit(0);
+    }
     printf("SUCCESSFULLY READ: %d\n", n);
 
     buffer[BUFSIZE-1] = '\0';
@@ -301,7 +305,12 @@ short send_response(int socket, int response_code, char *filename){
     printf("-----------------\n");
 
     strcat(headers, "\n"); // empty line before content
-    return send_content(socket, filename, headers, 0);
+    if(response_code != 500) {
+        return send_content(socket, filename, headers, 0);
+    }
+    else {
+        return -1;
+    }
 }
 
 unsigned long get_file_data(char *filename, char *content_type, int *response_code){
