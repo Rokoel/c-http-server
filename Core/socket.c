@@ -177,7 +177,7 @@ int get_filename(char buffer[], char *filename){
     }
 
     printf("GET_FILENAME: Filename: %s\n", filename);
-
+    printf("GET_FILENAME: response_code: %d\n", response_code);
     return response_code;
 }
 
@@ -207,6 +207,11 @@ int get_file(char buffer[], char *file){
             while (file_str_tok != NULL){
                 strcpy(file, file_str_tok);
                 file_str_tok = strtok (NULL, "/");
+            }
+            if(strlen(file) >= 64){
+                strcpy(file, "");
+                printf("GET_FILE: filename is too big. File will be index.html\n");
+                return 1;
             }
             printf("FILE: %s\n", file);
             return 0;
