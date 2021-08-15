@@ -6,7 +6,7 @@ Compile with gcc:
     gcc -pthread core.c server.c socket.c secondary.c -o ../Builds/serv -fPIC -fno-stack-protector
   ```
 
--fno-stack-protector is used because in place, where buffer overflow occurs, we handle it by ourselves so nothing is being damaged. If we don't include this flag, "clever" gcc will try to say that this is dangerous and will drop the programm.
+-fno-stack-protector is used because in place, where buffer overflow occurs, we handle it by ourselves so nothing is being damaged. If we don't include this flag, "clever" gcc will try to say that this is dangerous and will drop the program.
 
 Execute:
   execute from ../Core:
