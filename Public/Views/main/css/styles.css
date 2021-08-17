@@ -150,6 +150,28 @@ video {
   margin: 0 auto;
   position: absolute;
 }
+
+img:not(.x-small-image) {
+  object-fit: cover;
+  width: 100%;
+  height: 100%;
+  display: block;
+  margin: 0 auto;
+}
+
+.image-container:not(.x-small-image) {
+  overflow: hidden;
+  width: 50vw;
+  height: 30vh;
+  display: block;
+  margin: 0 auto;
+  border-top: 2px;
+  border-bottom: 2px;
+  border-left: 0;
+  border-right: 0;
+  border-color: rgba(196, 196, 196, 0.5);
+  border-style: solid;
+}
 /* -------------------------------- */
 
 /* --------- TEXT STYLING --------- */
@@ -213,6 +235,12 @@ hr.big {
   display: flex;
   flex-direction: column;
   justify-content: center;
+}
+.horizontal-evenly {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: space-evenly;
 }
 .x-small-image {
   max-width: 64px;
