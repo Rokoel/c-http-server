@@ -1,9 +1,9 @@
 window.addEventListener('scroll', function(e) {
     if(window.innerHeight - 50 <= window.scrollY){
-        document.getElementById('hidden-header-bg').style.visibility = 'visible';
+        document.getElementById('header').style.backgroundColor = '#000000';
     }
     else{
-        document.getElementById('hidden-header-bg').style.visibility = 'hidden';
+        document.getElementById('header').style.backgroundColor = 'transparent';
     }
 });
 

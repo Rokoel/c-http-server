@@ -39,6 +39,8 @@ h1, h2, h2 a, h2 a:hover, h3, h4, h5 {
   display: block;
   color: white;
   z-index: 1;
+  padding-left: 5%;
+  padding-right: 5%;
 }
 
 /* useful classes-properties */
@@ -57,18 +59,6 @@ h1, h2, h2 a, h2 a:hover, h3, h4, h5 {
 /* -------------------------------- */
 
 /* -------- HEADER STYLING -------- */
-div#hidden-header-bg {
-  position: fixed;
-  top: 0em;
-  width: 100%;
-  height: 3rem;
-  background-color: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(3px);
-  left: 0;
-  right: 0;
-  z-index: 2;
-  visibility: hidden;
-}
 div#header {
   display: flex;
   position: fixed;
@@ -77,10 +67,11 @@ div#header {
   align-items: center;
   align-content: center;
   justify-content: center;
-  margin: 1rem;
+  padding: 1rem;
   left: 0;
   right: 0;
   z-index: 3;
+  background-color: transparent;
 }
 div.text-holder-header {
   width: 100vw;
@@ -127,10 +118,15 @@ a:hover {
 a:focus, a:active {
   color: white;
 }
+.link-in-text {
+  font-size: 100%;
+  padding: 0;
+}
 /* -------------------------------- */
 
 /* -------- VIDEO STYLING --------- */
 .video-container {
+  overflow: hidden;
   width: 100vw;
   height: 100vh;
   display: block;
@@ -148,17 +144,19 @@ a:focus, a:active {
 }
 video {
   object-fit: cover;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   display: block;
   margin: 0 auto;
+  position: absolute;
 }
 /* -------------------------------- */
 
 /* --------- TEXT STYLING --------- */
 div.section {
   width: 100%;
-  display: block;
+  display: flex;
+  flex-direction: column;
 }
 .margin-vertical-section {
   margin-top: 3rem;
@@ -167,6 +165,10 @@ div.section {
 .margin-vertical {
   margin-top: 1rem;
   margin-bottom: 1rem;
+}
+.margin-vertical-huge {
+  margin-top: max(12%, 5rem);
+  margin-bottom: max(15%, 5rem);
 }
 p {
   font-size: x-large;
