@@ -167,8 +167,8 @@ div.section {
   margin-bottom: 1rem;
 }
 .margin-vertical-huge {
-  margin-top: max(12%, 5rem);
-  margin-bottom: max(15%, 5rem);
+  margin-top: min(12%, 5rem);
+  margin-bottom: min(15%, 5rem);
 }
 p {
   font-size: x-large;
