@@ -140,9 +140,9 @@ int get_filename(char buffer[], char *filename){
     else if(is_it_this_possible_route(buffer, "rules", route)){
         strcat(filename, "rules");
     }
-    else if(is_it_this_possible_route(buffer, "privacy_policy", route)){
-        strcat(filename, "privacy_policy");
-    }
+    // else if(is_it_this_possible_route(buffer, "privacy_policy", route)){
+    //     strcat(filename, "privacy_policy");
+    // }
     else if(is_it_this_possible_route(buffer, "err404", route)){
         response_code = 200;
         strcat(filename, "err404");
