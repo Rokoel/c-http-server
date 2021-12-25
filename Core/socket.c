@@ -1,4 +1,6 @@
 #include "helpful.h"
+#include "socket.h"
+#include "server.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,7 +25,7 @@
 #define MAX_CONTENT_TYPE_SIZE 64
 #define MAX_HEADERS_SIZE 256
 #define MAX_REQUESTED_ROUTE_SIZE 32
-#define MAX_POSSIBLE_ROUTE_SIZE 34 // !important - MAX_REQUESTED_ROUTE_SIZE + 2 always
+#define MAX_POSSIBLE_ROUTE_SIZE 34
 
 #define CSS     "css/"
 #define JS      "js/"
@@ -33,38 +35,71 @@
 
 #define MAX_ERRS 8
 
+/**
+ * @brief Function that waits for connections and accepts them.
+ * @param server_descriptor Server socket descriptor that is created in setup().
+ * @return Socket descriptor now contains new connection that is given to process() function.
+ */
+void work_with_socket(int *server_descriptor);
+
+/**
+ * @brief Function that in a new thread reads from socket and goes through full cycle of processing request.
+ * @param sock Connection socket descriptor.
+*/
 void* process(void* sock);
+
+/**
+ * 
+ * 
+*/
 short send_response(int socket, int response_type, char *filename);
-short send_content(int socket, char *filename, char *headers, int error_counter);
-unsigned long get_file_data(char *filename, char *content_type, int *response_code);
-int get_filename(char buffer[], char *route);
-int is_it_this_possible_route(char buffer[], char *possible_route, char *actual_route);
-int get_file(char buffer[], char *file);
-int check_route(char buffer[], char route_to_check[], char* possible_route, char *actual_route);
 
 /*
-TODO:
-- Refactoring
+
 */
+short send_content(int socket, char *filename, char *headers, int error_counter);
+
+/*
+
+*/
+unsigned long get_file_data(char *filename, char *content_type, int *response_code);
+
+/*
+
+*/
+int get_filename(char buffer[], char *route);
+
+/*
+
+*/
+int is_it_this_possible_route(char buffer[], char *possible_route, char *actual_route);
+
+/*
+
+*/
+int get_file(char buffer[], char *file);
+
+/*
+
+*/
+int check_route(char buffer[], char route_to_check[], char* possible_route, char *actual_route);
+
 
 void work_with_socket(int *server_descriptor){
     Socket sock;
     int clilen = 16; // from sizeof() (it is always the same)
-
     sock.socket_file_descriptor = accept(*server_descriptor, (struct sockaddr *) &(sock.address), &clilen);
 
     if (sock.socket_file_descriptor == -1) {
         if (errno == EWOULDBLOCK) {
-            sleep(0.5); // 17% cpu usage when 0.5 and 95+% when 0 and <17% when > 0.5
-            // affects respponsivness of the site (kind of delay between requests)
-            // okay results are waaaay better than this^ but more testing is needed
+            sleep(0.5);
         } else {
-            perror("error when accepting connection");
+            perror("Error when accepting connection!");
         }
     }
     else {
-        // we better do that or else we were reusing one variable... Anyway, that is a reasonable fix from stack overflow (I don't understand it fully)
-        // link to the fix https://stackoverflow.com/questions/30756210/unable-to-receive-data-after-connection-getting-bad-file-descriptor-error
+        // That is a reasonable fix from stack overflow
+        // https://stackoverflow.com/questions/30756210/unable-to-receive-data-after-connection-getting-bad-file-descriptor-error
         int *pconnfd = malloc(sizeof *pconnfd);
         if (NULL == pconnfd);
         *pconnfd = sock.socket_file_descriptor;
@@ -74,34 +109,43 @@ void work_with_socket(int *server_descriptor){
 }
 
 void* process(void* sock){
-    int error_flag = 0, n;
+    int bytes_read;
     int socket = *((int*)sock);
     free(sock);
     char buffer[BUFSIZE];
-    bzero(buffer, BUFSIZE-1);
-    n = read(socket, buffer, BUFSIZE-1);
-    printf("READ: %d\n", n);
-    if(n == -1){
-        if(errno == EWOULDBLOCK){
-            while(n == -1 && errno == EWOULDBLOCK){
-                n = read(socket, buffer, BUFSIZE-1);
-                printf("READ: %d\n", n);
+    bzero(buffer, BUFSIZE-1); //filling buffer with 0-s
+    
+    bytes_read = read(socket, buffer, BUFSIZE-1); //reading from socket to buffer
+    printf("READ: %d\n", bytes_read);
+
+    if(bytes_read == -1){ // if we tryed to read from socket, but something went wrong
+        if(errno == EWOULDBLOCK){ // and if operation would have been blocked
+            while(bytes_read == -1 && errno == EWOULDBLOCK){ // we are reading from socket until it is not blocked
+                bytes_read = read(socket, buffer, BUFSIZE-1);
+                printf("READ: %d\n", bytes_read);
             }
         }
-        else{perror(strerror(errno));}
+        else{ // if it is another error that we don't handle,
+            perror(strerror(errno)); // print error but don't drop the server (production :) )
+            close(socket); // we close the socket ///////////// DEBATABLE
+            pthread_exit(0); // and thread
+        }
     }
-    if(n == 0){
-        close(socket);
-        pthread_exit(0);
-    }
-    printf("SUCCESSFULLY READ: %d\n", n);
 
-    buffer[BUFSIZE-1] = '\0';
+    if(bytes_read == 0){ // if other side closed connection
+        close(socket); // we close the socket
+        pthread_exit(0); // and thread
+    }
+
+    // if everything is fine (no errors occured and socket isn't closed by the other side)
+    printf("SUCCESSFULLY READ: %d\n", bytes_read);
+
+    buffer[BUFSIZE-1] = '\0'; // add end of string to the buffer because read() doesn't do it auto
     char filename[MAX_FILENAME_SIZE];
     printf("BUFFER: %s\n", buffer);
-    strcpy(filename, "");
+    strcpy(filename, ""); // "initializing" filename
 
-    int response_code = get_filename(buffer, filename);
+    int response_code = get_filename(buffer, filename); // returns 200 or 404 and file path is now in filename
     printf("PROCESS: Response Code: %d\n", response_code);
 
     printf("PROCESS: Sending response...\n");
@@ -140,9 +184,6 @@ int get_filename(char buffer[], char *filename){
     else if(is_it_this_possible_route(buffer, "rules", route)){
         strcat(filename, "rules");
     }
-    // else if(is_it_this_possible_route(buffer, "privacy_policy", route)){
-    //     strcat(filename, "privacy_policy");
-    // }
     else if(is_it_this_possible_route(buffer, "err404", route)){
         response_code = 200;
         strcat(filename, "err404");
@@ -215,6 +256,10 @@ int get_file(char buffer[], char *file){
             }
             printf("FILE: %s\n", file);
             return 0;
+        }
+        else{
+            // error occured
+            printf("FATAL ERROR IN SSCANF in get_file()\n\n");
         }
         // if buffer has wrong formatting
         strcpy(file, "");

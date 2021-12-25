@@ -9,11 +9,6 @@
 #define FILE_TOO_LARGE 2
 #define FILE_READ_ERROR 3
 
-void error(char *msg){
-  perror(msg);
-  //exit(1); nope
-}
-
 int choose_port(int argc, char **argv){
   if (argc != 2) {
     printf("CHOOSE_PORT: Using default port 80\n");    
@@ -24,7 +19,6 @@ int choose_port(int argc, char **argv){
   }
 }
 
-// someone else's implementation of reading file to a string
 char* c_read_file(const char * f_name, short * err, size_t * f_size) {
   char * buffer;
   size_t length;

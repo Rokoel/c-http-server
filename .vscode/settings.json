@@ -5,6 +5,8 @@
         "inet.h": "c",
         "string.h": "c",
         "in.h": "c",
-        "unistd.h": "c"
+        "unistd.h": "c",
+        "helpful.h": "c",
+        "server.h": "c"
     }
 }
