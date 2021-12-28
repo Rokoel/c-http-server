@@ -15,30 +15,43 @@
 #include "socket.h"    /* work_with_socket */
 
 #include <stdio.h>    /* fprintf, struct FILE */
-#include <time.h>    /* time_t, s */
+#include <time.h>    /* time, struct time_t & related functions */
 
 #define MAXCONN 100    /* number of maximum connections */
-#define LOGS_LOCATION "../Logs/logs.txt"    /* location of the logs file */
 
 Server serv;    /* main server */
 FILE *logs;    /* logs file pointer */
 
+/** @brief Entering point for the compiler.
+ * 
+ *  This function opens (or creates) today's logs file,
+ *  then sets the server up on specified port and starts
+ *  the main cycle.
+ *  
+ *  @param argc Number of program execution arguments.
+ *  @param argv Array containing program execution arguments.
+ *  @return Should not return.
+ */
 int main(int argc, char **argv) {
-
+  /* Allocates memory that is enough for assosiated data. */
+  char *current_log_file = (char*)malloc(sizeof(char)*32 + 1), *date_and_time = (char*)malloc(sizeof(char)*DATE_TIME_LEN + 1);
+  /* Gets today's date that will be used in naming current log file. */
+  format_current_time_and_date(date_and_time, 0);
+  /* Sets current_log_file to today's log filename. */
+  sprintf(current_log_file, LOGS_LOCATION, date_and_time);
   /* Opens logs file. */
-  logs = fopen(LOGS_LOCATION, "a+");
-
-  printf("%s: Server started on port %d\n", __func__);
-  fprintf(logs, "%s: Server started on port %d\n", __func__);
+  logs = fopen(current_log_file, "a+");
 
   /* Sets up the server. */
-  int port = setup(&serv, choose_port(argc, argv), MAXCONN, logs);
-  printf("%s: Server started on port %d\n", __func__, port);
-  fprintf(logs, "%s: Server started on port %d\n", __func__, port);
-  printf("%s: Waiting for connetions...\n\n", __func__);
-  fprintf(logs, "%s: Waiting for connetions...\n\n", __func__);
-  
+  int port = setup(&serv, choose_port(logs, argc, argv), MAXCONN, logs);
+
+  /* Prints information to the console and to the logs file. */
+  print(logs, "Server started on port %d\n", port);
+  print(logs, "Waiting for connetions...\n\n");
+
+  /* Closes logs file. */
   fclose(logs);
+
   /* Server working loop. */
   while (1){
     work_with_socket(&(serv.server_file_descriptor));

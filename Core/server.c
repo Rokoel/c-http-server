@@ -13,12 +13,12 @@
 #include "socket.h"
 
 #include <unistd.h>
-#include <stdio.h>
+#include <stdio.h>    /*  */
 #include <sys/socket.h>
 #include <stdlib.h>
 #include <netinet/in.h>
 #include <string.h>
-#include <fcntl.h>
+#include <fcntl.h>    /* fseek */
 
 /** @brief Sets up the server socket.
  * 
@@ -32,7 +32,6 @@
  *  @param logs A pointer to logs' file.
  *  @return Port that is now used for the server.
  */
-
 int setup(struct Server *serv, int port, int maximum_of_connections, FILE *logs){
 
     /* Tries to open a socket. */
