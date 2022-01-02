@@ -8,6 +8,8 @@
         "unistd.h": "c",
         "helpful.h": "c",
         "server.h": "c",
-        "fcntl.h": "c"
+        "fcntl.h": "c",
+        "split_buffer.h": "c",
+        "socket.h": "c"
     }
 }

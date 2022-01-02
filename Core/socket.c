@@ -1,6 +1,36 @@
+/** @file socket.c
+ *  @brief File that contains all main cycle functions.
+ * 
+ *  This file gets all incoming requests and processes them. It contains all these functions:
+ *  - accept_socket_and_open_thread, which accepts an incoming connection and creates
+ *  a thread for processing it,
+ * 
+ *  - process_socket, which processes the connection in a thread,
+ * 
+ *  - send_response, which sends headers and requested files to the client,
+ * 
+ *  - send_content, which sends requested files to the client,
+ * 
+ *  - get_file_data, which gets requested file's content-type and responce code,
+ * 
+ *  - get_filename, which gets file path for the contents of the page that was requested,
+ * 
+ *  - is_it_this_possible_route, which checks if this is the page that was requested,
+ * 
+ *  - get_file, which gets only file's filename,
+ * 
+ *  - check_route, which checks if the string, that is passed as an argument, matches
+ *  one of the routes.
+ * 
+ *  @author Valentine Y. Shevelev (Rokoel)
+ *  @bug Server dies if a specific request is received (or memory leaks occured).
+ *  @todo Logging system.
+ */
+
 #include "helpful.h"
 #include "socket.h"
 #include "server.h"
+#include "split_buffer.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,195 +67,234 @@
 
 /**
  * @brief Function that waits for connections and accepts them.
+ * 
+ * This function waits until a connection, receives it and sends it for
+ * processing in a new thread with function process().
+ * 
  * @param server_descriptor Server socket descriptor that is created in setup().
- * @return Socket descriptor now contains new connection that is given to process() function.
+ * @return Returns void.
  */
-void work_with_socket(int *server_descriptor);
+void accept_socket_and_open_thread(int *server_descriptor, char *logs_str){
 
-/**
- * @brief Function that in a new thread reads from socket and goes through full cycle of processing request.
- * @param sock Connection socket descriptor.
-*/
-void* process(void* sock);
-
-/**
- * 
- * 
-*/
-short send_response(int socket, int response_type, char *filename);
-
-/*
-
-*/
-short send_content(int socket, char *filename, char *headers, int error_counter);
-
-/*
-
-*/
-unsigned long get_file_data(char *filename, char *content_type, int *response_code);
-
-/*
-
-*/
-int get_filename(char buffer[], char *route);
-
-/*
-
-*/
-int is_it_this_possible_route(char buffer[], char *possible_route, char *actual_route);
-
-/*
-
-*/
-int get_file(char buffer[], char *file);
-
-/*
-
-*/
-int check_route(char buffer[], char route_to_check[], char* possible_route, char *actual_route);
-
-
-void work_with_socket(int *server_descriptor){
+    /* Creates Socket structure. */
     Socket sock;
-    int clilen = 16; // from sizeof() (it is always the same)
+
+    /* Accepts an incoming connection. */
+    int clilen = 16; /* that is from sizeof() and always stays the same */
     sock.socket_file_descriptor = accept(*server_descriptor, (struct sockaddr *) &(sock.address), &clilen);
 
+    /* If we got an error when accepting new request... */
     if (sock.socket_file_descriptor == -1) {
+        /* And if it is due to the fact that we haven't got any incoming requests... */
         if (errno == EWOULDBLOCK) {
+            /* Sleeps for 0.5 seconds (this number is gotten experementally) */
+            /* and skip to another loop cycle. */
             sleep(0.5);
-        } else {
-            perror("Error when accepting connection!");
+        }
+        /* If this is a different error... */
+        else {
+            FILE *logs = fopen(logs_str, "a+");
+            print(logs, "An error occured when accepting connection!");
+            fclose(logs);
         }
     }
+    /* If there are no errors... */
     else {
-        // That is a reasonable fix from stack overflow
-        // https://stackoverflow.com/questions/30756210/unable-to-receive-data-after-connection-getting-bad-file-descriptor-error
+        /* Saves socket file descriptor in newly allocated memory */
+        /* for it to exist after compiler reaches end of */
+        /* accept_socket_and_open_thread() function. */
         int *pconnfd = malloc(sizeof *pconnfd);
-        if (NULL == pconnfd);
         *pconnfd = sock.socket_file_descriptor;
+        /* Opens a new thread. */
         pthread_t t;
-        pthread_create(&t, NULL, process, pconnfd);
+        pthread_create(&t, NULL, process_socket, pconnfd);
     }
+
 }
 
-void* process(void* sock){
-    int bytes_read;
+/**
+ * @brief Function that in a new thread processes a request.
+ * 
+ * This function receives data from socket, processes it, sends data back to socket and closes it.
+ * It does it in a new thread.
+ * 
+ * @param sock Connection socket descriptor that is immediately saved inside the function and destroyed.
+ * @return Returns void.
+*/
+void* process_socket(void* sock){
+    /* Saves client socket descriptor to local variable so as it can free previousely allocated memory. */
     int socket = *((int*)sock);
     free(sock);
-    char buffer[BUFSIZE];
-    bzero(buffer, BUFSIZE-1); //filling buffer with 0-s
     
-    bytes_read = read(socket, buffer, BUFSIZE-1); //reading from socket to buffer
-    printf("READ: %d\n", bytes_read);
+    char *current_log_file = (char*)malloc(sizeof(char)*32 + 1), *date_and_time = (char*)malloc(sizeof(char)*DATE_TIME_LEN + 1);
+    /* Gets today's date that will be used in naming current log file. */
+    format_current_time_and_date(date_and_time, 0);
+    /* Sets current_log_file to today's log filename. */
+    sprintf(current_log_file, LOGS_LOCATION, date_and_time);
+    /* Opens logs file. */
+    FILE *logs = fopen(current_log_file, "a+");
+    free(current_log_file);
+    /* Gets file's filedescriptor. */
+    int logs_fd = fileno(logs);
+    /* Checks file for being locked/unlocked for writing. */
+    struct flock check_file_lock;
+    fcntl(logs_fd, F_GETLK, &check_file_lock);
+    /* Checks file lock until it is unlocked. */
+    while(check_file_lock.l_type != F_UNLCK){
+        printf("[%s] in %s(): ", date_and_time, __func__);
+        free(date_and_time);
+        printf("Logs file is currently locked by another thread. Retrying...\n");
+        fcntl(logs_fd, F_GETLK, &check_file_lock);
+    }
+    /* Fills flock structure for locking the file (because we know it's unlocked now). */
+    struct flock set_file_lock;
+    set_file_lock.l_type = F_WRLCK;
+    set_file_lock.l_whence = SEEK_SET;
+    set_file_lock.l_start = 0;
+    set_file_lock.l_len = 0;
+    set_file_lock.l_pid = getpid();
 
-    if(bytes_read == -1){ // if we tryed to read from socket, but something went wrong
-        if(errno == EWOULDBLOCK){ // and if operation would have been blocked
-            while(bytes_read == -1 && errno == EWOULDBLOCK){ // we are reading from socket until it is not blocked
-                bytes_read = read(socket, buffer, BUFSIZE-1);
-                printf("READ: %d\n", bytes_read);
+    /* Locks the file. */
+    fcntl(logs_fd, F_SETLK, &set_file_lock);
+    
+    /* Creating and filling buffer with zeros. */
+    char buffer[BUFSIZE];
+    bzero(buffer, BUFSIZE-1);
+    
+    /* Reads from the socket and saves the number of read bytes. */
+    int bytes_read;
+    bytes_read = read(socket, buffer, BUFSIZE-1);
+    
+    /* If we haven't received any data yet, we retry until we get data or we've waited for too long. */
+    int error_max_counter = 10000, error_counter = 0;
+    while(bytes_read == -1 && errno == EWOULDBLOCK && error_counter <= error_max_counter){ // we are reading from socket until it is not blocked
+        print(logs, "Hasn't received any data from the socket. Retrying... Received %d bytes.\n", bytes_read);
+        bytes_read = read(socket, buffer, BUFSIZE-1);
+        ++error_counter;
+    }
+    /* If an error still remains or if it occured just now, we print about it and close logs, socket and everything. */
+    if(bytes_read == -1){
+        if(errno != EWOULDBLOCK){
+            print(logs, "An unexpected error occured while reading from the socket.");
+        }
+        else{
+            print(logs, "Has been waiting for a responce for too long.");
+        }
+    }
+    /* If everything is fine... */
+    else{
+        /* Tells how many bytes did it read. */
+        print(logs, "Successfully read %d bytes.\n", bytes_read);
+        /* "Closes" the buffer and prints it. */
+        buffer[BUFSIZE-1] = '\0'; // add end of string to the buffer because read() doesn't do it auto
+        print(logs, "Received from client: \n%s\n", buffer);
+
+        print(logs, "Processed into structure:\n")
+        struct Request *req = split_buffer(buffer);
+        if (req) {
+            print(logs, "Method: %d\n", req->method);
+            print(logs, "Request-URI: %s\n", req->url);
+            print(logs, "HTTP-Version: %s\n", req->version);
+            print(logs, "Headers:\n");
+            struct Header *h;
+            for (h=req->headers; h; h=h->next) {
+                print(logs, "%32s: %s\n", h->name, h->value);
             }
+            print(logs, "Message-body:\n");
+            print(logs, "%s\n", req->body);
         }
-        else{ // if it is another error that we don't handle,
-            perror(strerror(errno)); // print error but don't drop the server (production :) )
-            close(socket); // we close the socket ///////////// DEBATABLE
-            pthread_exit(0); // and thread
-        }
+        free_request(req);
+
+        /* Creates and initializes filepath. */
+        char filepath[MAX_FILENAME_SIZE];
+        strcpy(filepath, "");
+
+        /* Gets filepath from the buffer and response code into variables. */
+        int response_code = get_filepath(buffer, filepath);
+        print(logs, "Response code is %d.\n", response_code);
+        
+        /* Sends response to the client (headers and requested content). */
+        print(logs, "Sending response...\n");
+        send_response(socket, response_code, filepath);
+        print(logs, "Response sent successfully!\n");
     }
-
-    if(bytes_read == 0){ // if other side closed connection
-        close(socket); // we close the socket
-        pthread_exit(0); // and thread
-    }
-
-    // if everything is fine (no errors occured and socket isn't closed by the other side)
-    printf("SUCCESSFULLY READ: %d\n", bytes_read);
-
-    buffer[BUFSIZE-1] = '\0'; // add end of string to the buffer because read() doesn't do it auto
-    char filename[MAX_FILENAME_SIZE];
-    printf("BUFFER: %s\n", buffer);
-    strcpy(filename, ""); // "initializing" filename
-
-    int response_code = get_filename(buffer, filename); // returns 200 or 404 and file path is now in filename
-    printf("PROCESS: Response Code: %d\n", response_code);
-
-    printf("PROCESS: Sending response...\n");
-    if(send_response(socket, response_code, filename) == -1) printf("PROCESS: We had errors!\n\n"); // this was disabled for now
-    else printf("PROCESS: Response sent successfully!\n\n");
-
+    
+    /* Closes everything: socket, logs and thread. */
     close(socket);
+    fclose(logs);
     pthread_exit(0);
 }
 
-int get_filename(char buffer[], char *filename){
+int get_filepath(char buffer[], char *filepath){
     short is_index_html, is_404 = 0;
     int response_code = 200;
     char route[MAX_REQUESTED_ROUTE_SIZE] = "";
-    strcat(filename, "../Public/Views/");
+    strcat(filepath, "../Public/Views/");
 
     /////////////////////////////// ROUTING //////////////////////////////////////
     if(is_it_this_possible_route(buffer, "", route)){
-        strcat(filename, "main");
+        strcat(filepath, "main");
     }
     else if(is_it_this_possible_route(buffer, "main",  route)){
-        strcat(filename, "main");
+        strcat(filepath, "main");
     }
     else if(is_it_this_possible_route(buffer, "about", route)){
-        strcat(filename, "about");
+        strcat(filepath, "about");
     }
     else if(is_it_this_possible_route(buffer, "contacts", route)){
-        strcat(filename, "contacts");
+        strcat(filepath, "contacts");
     }
     else if(is_it_this_possible_route(buffer, "for_admins", route)){
-        strcat(filename, "for_admins");
+        strcat(filepath, "for_admins");
     }
     else if(is_it_this_possible_route(buffer, "information", route)){
-        strcat(filename, "information");
+        strcat(filepath, "information");
     }
     else if(is_it_this_possible_route(buffer, "rules", route)){
-        strcat(filename, "rules");
+        strcat(filepath, "rules");
     }
     else if(is_it_this_possible_route(buffer, "err404", route)){
         response_code = 200;
-        strcat(filename, "err404");
+        strcat(filepath, "err404");
     }
     else {
         response_code = 404;
-        strcat(filename, "err404");
+        strcat(filepath, "err404");
         is_404 = 1;
     }
 
-    strcat(filename, "/");
+    strcat(filepath, "/");
     if(!is_404){
-        strcat(filename, route);
+        strcat(filepath, route);
     }
 
     /////////////////////// FILES FILENAMES //////////////////////////////////////
     if(strstr(buffer, "GET") || response_code == 404){
-        char file[MAX_FILENAME_SIZE];
-        is_index_html = get_file(buffer, file);
+        char filename[MAX_FILENAME_SIZE];
+        is_index_html = get_filename(buffer, filename);
         if(is_index_html == 0){
-            strcat(filename, file);
+            strcat(filepath, filename);
             response_code = 200;
         }
         if(is_index_html == 1){
-            strcat(filename, "index.html");
+            strcat(filepath, "index.html");
         }
         if(is_index_html == -1){
             // placeholder for now, should replace it with Internal Server Error filename
-            strcat(filename, "index.html");
+            strcat(filepath, "index.html");
             response_code = 500;
         }
     }
 
-    printf("GET_FILENAME: Filename: %s\n", filename);
+    printf("GET_FILENAME: Filename: %s\n", filepath);
     printf("GET_FILENAME: response_code: %d\n", response_code);
     return response_code;
 }
 
-int get_file(char buffer[], char *file){
+int get_filename(char buffer[], char *filename){
     if ( !strchr(buffer, '\n') ){
         // if buffer has wrong formatting
-        strcpy(file, "");
+        strcpy(filename, "");
         return -1;
     }
     else {
@@ -240,21 +309,21 @@ int get_file(char buffer[], char *file){
         if(sscanf(p_first_line, "%s %s %s\n", method, url, version) == 3){
             // if there is no ".", it is index html or 404
             if ( !strchr(url, '.') ){
-                strcpy(file, "");
+                strcpy(filename, "");
                 return 1;
             }
             // /text1/text2/.../image.jpg
             file_str_tok = strtok (url, "/");
             while (file_str_tok != NULL){
-                strcpy(file, file_str_tok);
+                strcpy(filename, file_str_tok);
                 file_str_tok = strtok (NULL, "/");
             }
-            if(strlen(file) >= 64){
-                strcpy(file, "");
+            if(strlen(filename) >= 64){
+                strcpy(filename, "");
                 printf("GET_FILE: filename is too big. File will be index.html\n");
                 return 1;
             }
-            printf("FILE: %s\n", file);
+            printf("FILE: %s\n", filename);
             return 0;
         }
         else{
@@ -262,10 +331,10 @@ int get_file(char buffer[], char *file){
             printf("FATAL ERROR IN SSCANF in get_file()\n\n");
         }
         // if buffer has wrong formatting
-        strcpy(file, "");
+        strcpy(filename, "");
         return -1;
     }
-    strcpy(file, "");
+    strcpy(filename, "");
     return 1; // if nothing is found, it is index html or 404 html
 }
 

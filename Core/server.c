@@ -12,13 +12,13 @@
 #include "server.h"
 #include "socket.h"
 
-#include <unistd.h>
-#include <stdio.h>    /*  */
-#include <sys/socket.h>
-#include <stdlib.h>
-#include <netinet/in.h>
-#include <string.h>
-#include <fcntl.h>    /* fseek */
+#include <unistd.h>    /* stuff for working with sockets */
+#include <stdio.h>    /* struct FILE & related functions, perror */
+#include <sys/socket.h>    /* stuff for working with sockets */
+#include <stdlib.h>    /* exit */
+#include <netinet/in.h>    /* stuff for working with sockets */
+#include <fcntl.h>    /* fcntl */
+#include <string.h>    /* bzero */
 
 /** @brief Sets up the server socket.
  * 
@@ -37,35 +37,31 @@ int setup(struct Server *serv, int port, int maximum_of_connections, FILE *logs)
     /* Tries to open a socket. */
     (*serv).server_file_descriptor = socket(AF_INET, SOCK_STREAM, 0);
     if ((*serv).server_file_descriptor < 0) {
-        fprintf(logs, "ERROR in %s: An error occured when opening socket.", __func__);
+        print(logs, "ERROR - An error occured when opening socket.\n");
         fclose(logs);
-        perror("ERROR opening socket.");
         exit(1);
     }
 
     /* Allows to reuse sockets (solves a bug "Adress already in use!"). */
     int optval = 1;
     if (setsockopt((*serv).server_file_descriptor, SOL_SOCKET, SO_REUSEADDR, (const void *)&optval, sizeof(int)) < 0){
-        fprintf(logs, "ERROR in %s: An error occured when executing setsockopt() function.", __func__);
+        print(logs, "ERROR - An error occured when executing setsockopt() function.\n");
         fclose(logs);
-        perror("Error on setsockopt().");
         exit(1);
     }
     
     /* Tries to get flags on TCP socket. */
     int flags = fcntl((*serv).server_file_descriptor, F_GETFL);
     if(flags == -1){
-        fprintf(logs, "ERROR in %s: An error occured when getting flags on TCP listening socket.", __func__);
+        print(logs, "ERROR - An error occured when getting flags on TCP listening socket.\n")
         fclose(logs);
-        perror("Error on getting flags on TCP listening socket.");
         exit(1);
     }
 
     /* Tries to set the socket to be non-blocking. */
     if (fcntl((*serv).server_file_descriptor, F_SETFL, flags | O_NONBLOCK) == -1){
-        fprintf(logs, "ERROR in %s: An error occured when setting TCP listening socket to be non-blocking.", __func__);
+        print(logs, "ERROR - An error occured when setting TCP listening socket to be non-blocking.\n")
         fclose(logs);
-        perror("Error on setting TCP listening socket to be non-blocking.");
         exit(1);
     }
     
@@ -78,15 +74,14 @@ int setup(struct Server *serv, int port, int maximum_of_connections, FILE *logs)
 
     /* Tries to bind socket. */
     if (bind((*serv).server_file_descriptor, (struct sockaddr *) &((*serv).address), sizeof((*serv).address)) < 0) {
-        fprintf(logs, "ERROR in %s: An error occured when binding server socket.", __func__);
-        perror("ERROR on binding.");
+        print(logs, "ERROR - An error occured when binding the server socket.\n");
         fclose(logs);
         exit(1);
     }
 
     /* Starts listening for incoming connections. */
     listen((*serv).server_file_descriptor, maximum_of_connections);
-    fprintf(logs, "%s: Started listening for inconing connections.\n", __func__);
+    print(logs, "Started listening for inconing connections.\n")
 
     return port;
 }

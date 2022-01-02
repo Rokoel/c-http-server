@@ -1,11 +1,11 @@
 #ifndef SERVER_H
 #define SERVER_H
 
-#include <stdio.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <netinet/in.h>
+#include <stdio.h>    /* struct FILE */
+#include <netinet/in.h>    /* struct sockaddr_in */
 
+
+/** @brief A structure that contains all information about the server socket. */
 typedef struct Server{
     int server_file_descriptor;
     int port;

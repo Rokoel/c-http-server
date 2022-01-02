@@ -39,8 +39,10 @@ int main(int argc, char **argv) {
   format_current_time_and_date(date_and_time, 0);
   /* Sets current_log_file to today's log filename. */
   sprintf(current_log_file, LOGS_LOCATION, date_and_time);
+  free(date_and_time);
   /* Opens logs file. */
   logs = fopen(current_log_file, "a+");
+  free(current_log_file);
 
   /* Sets up the server. */
   int port = setup(&serv, choose_port(logs, argc, argv), MAXCONN, logs);
@@ -54,6 +56,6 @@ int main(int argc, char **argv) {
 
   /* Server working loop. */
   while (1){
-    work_with_socket(&(serv.server_file_descriptor));
+    accept_socket_and_open_thread(&(serv.server_file_descriptor), current_log_file);
   }
 }
