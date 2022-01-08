@@ -6,18 +6,20 @@
  *  It also defines maximum of connections to the server.
  * 
  *  @author Valentine Y. Shevelev (Rokoel)
- *  @bug Server dies if a specific request is received.
- *  @todo Logging system.
- */
+ *  @bug Memory leak somewhere in split_buffer probably (maybe not there).
+ *  @todo POST requests, Redis DB.
+**/
 
 #include "helpful.h"    /* choose_port */
 #include "server.h"    /* struct Server */
 #include "socket.h"    /* work_with_socket */
+#include "settings.h"    /* settings' constants */
+#include "save_filestructure.h"
 
 #include <stdio.h>    /* fprintf, struct FILE */
 #include <time.h>    /* time, struct time_t & related functions */
-
-#define MAXCONN 100    /* number of maximum connections */
+#include <string.h>    /* strlen */
+#include <pthread.h>    /* pthread_create */
 
 Server serv;    /* main server */
 FILE *logs;    /* logs file pointer */
@@ -31,10 +33,10 @@ FILE *logs;    /* logs file pointer */
  *  @param argc Number of program execution arguments.
  *  @param argv Array containing program execution arguments.
  *  @return Should not return.
- */
+**/
 int main(int argc, char **argv) {
   /* Allocates memory that is enough for assosiated data. */
-  char *current_log_file = (char*)malloc(sizeof(char)*32 + 1), *date_and_time = (char*)malloc(sizeof(char)*DATE_TIME_LEN + 1);
+  char *current_log_file = (char*)malloc(strlen(LOGS_LOCATION) + DATE_TIME_LEN + 1), *date_and_time = (char*)malloc(DATE_TIME_LEN + 1);
   /* Gets today's date that will be used in naming current log file. */
   format_current_time_and_date(date_and_time, 0);
   /* Sets current_log_file to today's log filename. */
@@ -45,7 +47,7 @@ int main(int argc, char **argv) {
   free(current_log_file);
 
   /* Sets up the server. */
-  int port = setup(&serv, choose_port(logs, argc, argv), MAXCONN, logs);
+  int port = setup(&serv, choose_port(argc, argv, logs), MAXCONN, logs);
 
   /* Prints information to the console and to the logs file. */
   print(logs, "Server started on port %d\n", port);
@@ -53,6 +55,9 @@ int main(int argc, char **argv) {
 
   /* Closes logs file. */
   fclose(logs);
+
+  pthread_t t;
+  pthread_create(&t, NULL, update_filestructure, 0);
 
   /* Server working loop. */
   while (1){

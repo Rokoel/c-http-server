@@ -6,11 +6,11 @@
  * 
  *  @author Valentine Y. Shevelev (Rokoel)
  *  @bug No known bugs.
- */
+**/
 
-#include "helpful.h"
+#include "helpful.h"    /* print macro */
 #include "server.h"
-#include "socket.h"
+
 
 #include <unistd.h>    /* stuff for working with sockets */
 #include <stdio.h>    /* struct FILE & related functions, perror */

@@ -1,11 +1,10 @@
 #ifndef HELPFUL_H
 #define HELPFUL_H
 
-#include <stdlib.h>    /* struct FILE & related functions */
-#include <stdio.h>    /* printf */
+#include "settings.h"    /* settings' constants */
 
-#define LOGS_LOCATION "../Logs/log-%s.txt"    /* string with specificators of format for locations of the log files */
-#define DATE_TIME_LEN 256    /* length of string that contains date and time */
+#include <stdlib.h>    /* malloc, free */
+#include <stdio.h>    /* struct FILE & related functions, printf */
 
 /* A macro that prints to console and to logs with time and date. */
 #define print(logs, args...) {\
@@ -20,8 +19,8 @@
 
 int format_current_time_and_date(char* time_and_date_buffer, int should_return_both);
 
-int choose_port(FILE *logs, int argc, char **argv);
+int choose_port(int argc, char **argv, FILE *logs);
 
-char* c_read_file(const char * f_name, short * err, size_t * f_size);
+char* c_read_file(const char * f_name, short * err, size_t * f_size, FILE *logs);
 
 #endif

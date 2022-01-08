@@ -11,57 +11,39 @@
  * 
  *  - send_content, which sends requested files to the client,
  * 
- *  - get_file_data, which gets requested file's content-type and responce code,
- * 
- *  - get_filename, which gets file path for the contents of the page that was requested,
- * 
- *  - is_it_this_possible_route, which checks if this is the page that was requested,
- * 
- *  - get_file, which gets only file's filename,
- * 
- *  - check_route, which checks if the string, that is passed as an argument, matches
- *  one of the routes.
+ *  - get_file_data, which gets requested file's content-type and responce code.
  * 
  *  @author Valentine Y. Shevelev (Rokoel)
- *  @bug Server dies if a specific request is received (or memory leaks occured).
- *  @todo Logging system.
+ *  @bug No known bugs.
+ *  @todo POST requests.
  */
 
-#include "helpful.h"
+#include "helpful.h"    /* print macro */
 #include "socket.h"
-#include "server.h"
-#include "split_buffer.h"
+#include "split_buffer.h"    /* split_buffer */
+#include "settings.h"    /* constants */
+#include "get_filepath.h"    /* get_filepath */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <pthread.h>
+#include <stdio.h>    /* struct FILE & related functions*/
+#include <stdlib.h>    /* malloc, free */
+#include <string.h>    /* strlen, strcat, strstr, strcpy */
+#include <pthread.h>    /* pthread_create */
 
-#include <unistd.h>
+#include <unistd.h>    /* socket-related functions */
 
-#include <sys/socket.h>
-#include <sys/stat.h>
+#include <sys/stat.h>    /* stat */
 
-#include <netinet/in.h>
-#include <arpa/inet.h>
-
-#include <fcntl.h>
-#include <errno.h>
+#include <fcntl.h>    /* fcntl */
+#include <errno.h>    /* errno, EWOULDBLOCK */
 
 
 #define BUFSIZE 1024
 #define MAX_FILENAME_SIZE 64
 #define MAX_HEADER_LINE_SIZE 96
 #define MAX_CONTENT_TYPE_SIZE 64
-#define MAX_HEADERS_SIZE 256
+#define MAX_HEADERS_SIZE 700
 #define MAX_REQUESTED_ROUTE_SIZE 32
 #define MAX_POSSIBLE_ROUTE_SIZE 34
-
-#define CSS     "css/"
-#define JS      "js/"
-#define IMAGES  "images/"
-#define VIDEOS  "videos/"
-#define AUDIOS  "audios/"
 
 #define MAX_ERRS 8
 
@@ -73,7 +55,7 @@
  * 
  * @param server_descriptor Server socket descriptor that is created in setup().
  * @return Returns void.
- */
+**/
 void accept_socket_and_open_thread(int *server_descriptor, char *logs_str){
 
     /* Creates Socket structure. */
@@ -120,7 +102,7 @@ void accept_socket_and_open_thread(int *server_descriptor, char *logs_str){
  * 
  * @param sock Connection socket descriptor that is immediately saved inside the function and destroyed.
  * @return Returns void.
-*/
+**/
 void* process_socket(void* sock){
     /* Saves client socket descriptor to local variable so as it can free previousely allocated memory. */
     int socket = *((int*)sock);
@@ -142,10 +124,10 @@ void* process_socket(void* sock){
     /* Checks file lock until it is unlocked. */
     while(check_file_lock.l_type != F_UNLCK){
         printf("[%s] in %s(): ", date_and_time, __func__);
-        free(date_and_time);
         printf("Logs file is currently locked by another thread. Retrying...\n");
         fcntl(logs_fd, F_GETLK, &check_file_lock);
     }
+    free(date_and_time);
     /* Fills flock structure for locking the file (because we know it's unlocked now). */
     struct flock set_file_lock;
     set_file_lock.l_type = F_WRLCK;
@@ -183,40 +165,59 @@ void* process_socket(void* sock){
     }
     /* If everything is fine... */
     else{
-        /* Tells how many bytes did it read. */
+        /* Tells how many bytes it read. */
         print(logs, "Successfully read %d bytes.\n", bytes_read);
         /* "Closes" the buffer and prints it. */
-        buffer[BUFSIZE-1] = '\0'; // add end of string to the buffer because read() doesn't do it auto
+        buffer[BUFSIZE-1] = '\0';
+        buffer[BUFSIZE-2] = '\n';
+        buffer[BUFSIZE-3] = '\r';
+        buffer[BUFSIZE-4] = '\n';
+        
         print(logs, "Received from client: \n%s\n", buffer);
 
-        print(logs, "Processed into structure:\n")
-        struct Request *req = split_buffer(buffer);
+        /* Tries to parse the request into a structure. */
+        print(logs, "What was processed into a structure:\n")
+        struct Request *req = split_buffer(buffer, logs);
+
+        /* If parsing is successful... */
         if (req) {
             print(logs, "Method: %d\n", req->method);
             print(logs, "Request-URI: %s\n", req->url);
             print(logs, "HTTP-Version: %s\n", req->version);
             print(logs, "Headers:\n");
-            struct Header *h;
-            for (h=req->headers; h; h=h->next) {
-                print(logs, "%32s: %s\n", h->name, h->value);
-            }
             print(logs, "Message-body:\n");
-            print(logs, "%s\n", req->body);
+
+            /* Creates and initializes filepath. */
+            // char *filepath = malloc(strlen(VIEWS_FOLDER) + strlen(req->url) + strlen(INDEX_HTML_FILENAME) + strlen(MAIN_PAGE_FOLDER_WITH_SLASH) + 1);
+            char filepath[1024];
+            /* Gets filepath from the buffer and response code into variables. */
+            int response_code = get_filepath(req->url, filepath, logs);
+            print(logs, "Response code is %d.\n", response_code);
+            
+            /* Sends response to the client (headers and requested content). */
+            print(logs, "Sending response...\n");
+            send_response(socket, response_code, filepath, logs);
+            //free(filepath);
+            print(logs, "Response sent successfully!\n");
+            /* We free the Request structure either way. */
+            free_request(req, logs);
         }
-        free_request(req);
+        /* If parsing is unsuccessful... */
+        else{
+            /* We print about it and return 404. */
+            print(logs, "Request has got wrong formatting. Sending err404...\n");
+            char *filepath = malloc(strlen(VIEWS_FOLDER) + strlen("/err404/index.html") + strlen(INDEX_HTML_FILENAME) + strlen(MAIN_PAGE_FOLDER_WITH_SLASH) + 1);
 
-        /* Creates and initializes filepath. */
-        char filepath[MAX_FILENAME_SIZE];
-        strcpy(filepath, "");
-
-        /* Gets filepath from the buffer and response code into variables. */
-        int response_code = get_filepath(buffer, filepath);
-        print(logs, "Response code is %d.\n", response_code);
-        
-        /* Sends response to the client (headers and requested content). */
-        print(logs, "Sending response...\n");
-        send_response(socket, response_code, filepath);
-        print(logs, "Response sent successfully!\n");
+            /* Gets filepath from the buffer and response code into variables. */
+            int response_code = get_filepath("/err404/index.html", filepath, logs);
+            print(logs, "Response code is %d.\n", response_code);
+            
+            /* Sends response to the client (headers and requested content). */
+            print(logs, "Sending response...\n");
+            send_response(socket, response_code, filepath, logs);
+            free(filepath);
+            print(logs, "Response sent successfully!\n");
+        }
     }
     
     /* Closes everything: socket, logs and thread. */
@@ -225,170 +226,28 @@ void* process_socket(void* sock){
     pthread_exit(0);
 }
 
-int get_filepath(char buffer[], char *filepath){
-    short is_index_html, is_404 = 0;
-    int response_code = 200;
-    char route[MAX_REQUESTED_ROUTE_SIZE] = "";
-    strcat(filepath, "../Public/Views/");
+/**
+ * @brief Function that responds to a client.
+ * 
+ * This function sends headers (depending on response code) and file,
+ * which is gotten from filepath.
+ * 
+ * @param socket Socket to send file to.
+ * @param response_code Response code that is used for choosing headers.
+ * @param filepath Path to a file to be sent.
+ * @return Returns void.
+**/
+void send_response(int socket, int response_code, char *filepath, FILE *logs){
+    /* Creates variables to be used in the future. We can use static memory allocation because */
+    /* we set contents of this arrays by ourselves. */
+    char current_line[MAX_HEADER_LINE_SIZE] = "";
+    char headers[MAX_HEADERS_SIZE] = "";
+    char content_type[MAX_CONTENT_TYPE_SIZE] = "";
 
-    /////////////////////////////// ROUTING //////////////////////////////////////
-    if(is_it_this_possible_route(buffer, "", route)){
-        strcat(filepath, "main");
-    }
-    else if(is_it_this_possible_route(buffer, "main",  route)){
-        strcat(filepath, "main");
-    }
-    else if(is_it_this_possible_route(buffer, "about", route)){
-        strcat(filepath, "about");
-    }
-    else if(is_it_this_possible_route(buffer, "contacts", route)){
-        strcat(filepath, "contacts");
-    }
-    else if(is_it_this_possible_route(buffer, "for_admins", route)){
-        strcat(filepath, "for_admins");
-    }
-    else if(is_it_this_possible_route(buffer, "information", route)){
-        strcat(filepath, "information");
-    }
-    else if(is_it_this_possible_route(buffer, "rules", route)){
-        strcat(filepath, "rules");
-    }
-    else if(is_it_this_possible_route(buffer, "err404", route)){
-        response_code = 200;
-        strcat(filepath, "err404");
-    }
-    else {
-        response_code = 404;
-        strcat(filepath, "err404");
-        is_404 = 1;
-    }
+    /* Gets information about the file. Response code may be changed in the process. */
+    unsigned long file_size = get_file_data(filepath, content_type, &response_code);
 
-    strcat(filepath, "/");
-    if(!is_404){
-        strcat(filepath, route);
-    }
-
-    /////////////////////// FILES FILENAMES //////////////////////////////////////
-    if(strstr(buffer, "GET") || response_code == 404){
-        char filename[MAX_FILENAME_SIZE];
-        is_index_html = get_filename(buffer, filename);
-        if(is_index_html == 0){
-            strcat(filepath, filename);
-            response_code = 200;
-        }
-        if(is_index_html == 1){
-            strcat(filepath, "index.html");
-        }
-        if(is_index_html == -1){
-            // placeholder for now, should replace it with Internal Server Error filename
-            strcat(filepath, "index.html");
-            response_code = 500;
-        }
-    }
-
-    printf("GET_FILENAME: Filename: %s\n", filepath);
-    printf("GET_FILENAME: response_code: %d\n", response_code);
-    return response_code;
-}
-
-int get_filename(char buffer[], char *filename){
-    if ( !strchr(buffer, '\n') ){
-        // if buffer has wrong formatting
-        strcpy(filename, "");
-        return -1;
-    }
-    else {
-        char *p_first_line, *file_str_tok;
-        char safe_buffer[1024];
-        strcpy(safe_buffer, buffer);
-        char method[16];  // request method
-        char url[256];     // request uri
-        char version[16]; // request version
-
-        p_first_line = strtok (safe_buffer, "\n");
-        if(sscanf(p_first_line, "%s %s %s\n", method, url, version) == 3){
-            // if there is no ".", it is index html or 404
-            if ( !strchr(url, '.') ){
-                strcpy(filename, "");
-                return 1;
-            }
-            // /text1/text2/.../image.jpg
-            file_str_tok = strtok (url, "/");
-            while (file_str_tok != NULL){
-                strcpy(filename, file_str_tok);
-                file_str_tok = strtok (NULL, "/");
-            }
-            if(strlen(filename) >= 64){
-                strcpy(filename, "");
-                printf("GET_FILE: filename is too big. File will be index.html\n");
-                return 1;
-            }
-            printf("FILE: %s\n", filename);
-            return 0;
-        }
-        else{
-            // error occured
-            printf("FATAL ERROR IN SSCANF in get_file()\n\n");
-        }
-        // if buffer has wrong formatting
-        strcpy(filename, "");
-        return -1;
-    }
-    strcpy(filename, "");
-    return 1; // if nothing is found, it is index html or 404 html
-}
-
-int is_it_this_possible_route(char buffer[], char *poss_route, char *actual_route){
-    char possible_route[MAX_REQUESTED_ROUTE_SIZE] = "";
-    sprintf(possible_route, "%c%s", '/', poss_route);
-    int is_route = 0;
-    printf("POSSIBLE_ROUTE in is_it_this_possible_route: %s\n", possible_route);
-    printf("BUFFER in is_it_this_possible_route: %s\n", buffer);
-
-    char html_route[MAX_POSSIBLE_ROUTE_SIZE];
-    if(!strcmp(possible_route, "/")) strcpy(html_route, "GET / ");
-    else sprintf(html_route, " %s ", possible_route);
-    if(strstr(buffer, html_route) != NULL){
-        strcpy(actual_route, "");
-        is_route = 1;
-    }
-
-    is_route += check_route(buffer, CSS, possible_route, actual_route);
-    is_route += check_route(buffer, JS, possible_route, actual_route);
-    is_route += check_route(buffer, IMAGES, possible_route, actual_route);
-    is_route += check_route(buffer, VIDEOS, possible_route, actual_route);
-    is_route += check_route(buffer, AUDIOS, possible_route, actual_route);
-
-    printf("ACTUAL_ROUTE in is_it_this_possible_route: %s\n", actual_route);
-    return is_route;
-}
-
-int check_route(char buffer[], char route_to_check[], char* possible_route, char *actual_route){
-    char temp_bufer[MAX_POSSIBLE_ROUTE_SIZE];
-    if(!strcmp(possible_route, "/") || !strcmp(possible_route, "/main"))
-        sprintf(temp_bufer, " /%s", route_to_check);
-    else
-        sprintf(temp_bufer, " %s/%s", possible_route, route_to_check);
-
-    if(strstr(buffer, temp_bufer) != NULL){
-        sprintf(temp_bufer, "%s", route_to_check);
-        strcpy(actual_route, temp_bufer);
-        printf("ACTUAL ROUTE: %s\n", actual_route);
-        return 1;
-    }
-    return 0;
-}
-
-short send_response(int socket, int response_code, char *filename){
-    char current_line[MAX_HEADER_LINE_SIZE];
-    strcpy(current_line, "");
-    char headers[MAX_HEADERS_SIZE];
-    strcpy(headers, "");
-
-    char content_type[MAX_CONTENT_TYPE_SIZE];
-    strcpy(content_type, "");
-    unsigned long file_size = get_file_data(filename, content_type, &response_code);
-
+    /* Saves first line of headers depending on the response code. */
     switch (response_code){
         case 200:
         {
@@ -402,112 +261,129 @@ short send_response(int socket, int response_code, char *filename){
             break;
         }
 
+        /* This doesn't differ from 404 for now. */
         default:
         {
-            // Internal Server Error, so this is unexpected behavior.
             strcat(headers, "HTTP/1.1 500 Internal Server Error\n");
             break;
         }
     }
+
+    /* Saves headers to a string. */
     strcat(headers, "Server: Rokoel WebServer\n");
-    
     sprintf(current_line, "Content-length: %lu\n", file_size);
     strcat(headers, current_line);
-
     sprintf(current_line, "Content-type: %s\n", content_type);
     strcat(headers, current_line);
 
-    printf("SEND_RESPONSE:\n");
-    printf("Response headers:\n");
-    printf("-----------------\n");
-    printf("%s", headers);
-    printf("-----------------\n");
 
-    strcat(headers, "\n"); // empty line before content
-    if(response_code != 500) {
-        return send_content(socket, filename, headers, 0);
-    }
-    else {
-        return -1;
-    }
+    print(logs, "SEND_RESPONSE:\n");
+    print(logs, "Response headers:\n");
+    print(logs, "-----------------\n");
+    print(logs, "%s", headers);
+    print(logs, "-----------------\n");
+
+    /* Ends headers with empty line. */
+    strcat(headers, "\n");
+    /* Sends headers alongside with file's contents. */
+    send_content(socket, filepath, headers, logs);
 }
 
-unsigned long get_file_data(char *filename, char *content_type, int *response_code){
+/**
+ * @brief Function that gets information about the file.
+ * 
+ * This function gets file's content type and its size. It may also change response code.
+ * 
+ * @param filepath Path to a file to get information about.
+ * @param content_type A pointer that will point to file's content type.
+ * @param response_code Pointer to response code, because it may be changed.
+ * @return Returns file's size.
+**/
+unsigned long get_file_data(char *filepath, char *content_type, int *response_code){
+    /* Gets file data. */
     struct stat file_data;
-    if (stat(filename, &file_data) < 0) { // filename is based by us so it is impossible to use it badly
-        *response_code = 404;
-        strcpy(filename, "../Public/Views/err404/index.html");
-        printf("GET_FILE_DATA -> 404\n");
-        return get_file_data(filename, content_type, response_code);
+    /* If somehow file's data cannot be gathered... */
+    if (stat(filepath, &file_data) < 0) {
+        /* Sets response code to 500 and filepath is now err404's index.html. */
+        *response_code = 500;
+        strcpy(filepath, ERROR_404_INDEX_HTML_ROUTE);
+        /* We can't do much, so it doesn't really matter. */
+        return 0;
     }
-    if (strstr(filename, ".html"))
+    
+    /* Gets file's content type. */
+    if (strstr(filepath, ".html"))
         strcpy(content_type, "text/html");
-    else if (strstr(filename, ".gif"))
+    else if (strstr(filepath, ".gif"))
         strcpy(content_type, "image/gif");
-    else if (strstr(filename, ".jpg"))
+    else if (strstr(filepath, ".jpg"))
         strcpy(content_type, "image/jpg");
-    else if (strstr(filename, ".png"))
+    else if (strstr(filepath, ".png"))
         strcpy(content_type, "image/png");
-    else if (strstr(filename, ".css"))
+    else if (strstr(filepath, ".css"))
         strcpy(content_type, "text/css");
-    else if (strstr(filename, ".js"))
+    else if (strstr(filepath, ".js"))
         strcpy(content_type, "text/javascript");
-    else if (strstr(filename, ".ico"))
+    else if (strstr(filepath, ".ico"))
         strcpy(content_type, "image/x-icon");
-    else if (strstr(filename, ".webm"))
+    else if (strstr(filepath, ".webm"))
         strcpy(content_type, "video/webm");
-    else if (strstr(filename, ".mp4"))
+    else if (strstr(filepath, ".mp4"))
         strcpy(content_type, "video/mp4");
-    else if (strstr(filename, ".mp3"))
+    else if (strstr(filepath, ".mp3"))
         strcpy(content_type, "audio/mp3");
-    else if (strstr(filename, ".wav"))
+    else if (strstr(filepath, ".wav"))
         strcpy(content_type, "audio/wav");
     else 
         strcpy(content_type, "text/plain");
-
+    
+    /* Returns file's size. */
     return (unsigned long)file_data.st_size;
 }
 
-short send_content(int socket, char *filename, char *headers, int error_counter){
+/**
+ * @brief Function that sends everything to the user.
+ * 
+ * This function sends headers and file to a socket.
+ * 
+ * @param socket Socket that everything will be sent to.
+ * @param filepath String containing path to a file to be sent.
+ * @param headers String containing headers.
+ * @return Returns void.
+**/
+void send_content(int socket, char *filepath, char *headers, FILE *logs){
     short err;
     size_t f_size;
     char * f_data;
-    f_data = c_read_file(filename, &err, &f_size);
-    if (err) {
-        printf("SEND_CONTENT: c_read_file_error\n");
-        // what should we do?
-    }
-    else {
-        int n = write(socket, headers, strlen(headers));
-        if(n == -1){
-            if(errno == EWOULDBLOCK){
-                while(n == -1 && errno == EWOULDBLOCK){
-                    n = write(socket, headers, strlen(headers));
-                    printf("WRITE1: %d\n", n);
-                }
-            }
-            else{
-                printf("SEND_CONTENT: 1-st write error\n");
-                printf("Write1: %d", n);
-                // what should we do?
+    /* Reads a file to a string. */
+    f_data = c_read_file(filepath, &err, &f_size, logs);
+
+    /* Writes headers. */
+    int n = write(socket, headers, strlen(headers));
+    /* If socket would have been blocked, tries again. */
+    if(n == -1){
+        if(errno == EWOULDBLOCK){
+            int i = 0;
+            while(n == -1 && errno == EWOULDBLOCK && i < 1000){
+                n = write(socket, headers, strlen(headers));
+                print(logs, "Trying to write headers again... Wrote %d bytes this time.\n", n);
+                ++i;
             }
         }
-        n = write(socket, f_data, f_size);
-        if(n == -1){
-            if(errno == EWOULDBLOCK){
-                while(n == -1 && errno == EWOULDBLOCK){
-                    n = write(socket, f_data, f_size);
-                    printf("WRITE2: %d\n", n);
-                }
-            }
-            else{
-                printf("SEND_CONTENT: 2-nd write error\n");
-                printf("Write2: %d", n);
-                // what should we do?
+    }
+    print(logs, "Successfully wrote %d bytes of headers.\n", n);
+    /* Writes file contents. */
+    n = write(socket, f_data, f_size);
+    /* If socket would have been blocked, tries again. */
+    if(n == -1){
+        if(errno == EWOULDBLOCK){
+            while(n == -1 && errno == EWOULDBLOCK){
+                n = write(socket, f_data, f_size);
+                print(logs, "Trying to write file again... Wrote %d bytes this time.\n", n);
             }
         }
-        printf("SEND_CONTENT: Sended file was %d bytes.\n", n);
-        free(f_data);
-        return 0;
     }
+    print(logs, "Successfully wrote a file to a socket. It was %d bytes.\n", n);
+    /* Frees string containing file's content. */
+    free(f_data);
 }

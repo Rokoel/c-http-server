@@ -8,11 +8,12 @@
  * 
  *  @author Valentine Y. Shevelev (Rokoel)
  *  @bug No known bugs.
- */
+**/
+
 #include "helpful.h"
 
-#include <stdio.h>    /* printf */
-#include <stdlib.h>    /* atoi, struct FILE & related functions */
+#include <stdio.h>    /* struct FILE & related functions, printf */
+#include <stdlib.h>    /* atoi */
 #include <time.h>    /* time, struct time_t & related functions */
 #include <string.h>    /* strcpy */
 
@@ -31,7 +32,7 @@
  *  @param time_and_date_buffer String that will contain the result of function execution.
  *  @param should_return_both If equals 1, 1-st parameter will contain date and time, it will contain only date otherwise.
  *  @return Returns 1 on success, 0 otherwise.
- */
+**/
 int format_current_time_and_date(char* time_and_date_buffer, int should_return_both){
   char buf[DATE_TIME_LEN] = {0};
 
@@ -70,10 +71,10 @@ int format_current_time_and_date(char* time_and_date_buffer, int should_return_b
  *  @param argc Number of program execution arguments.
  *  @param argv Array containing program execution arguments.
  *  @return Returns port.
- */
-int choose_port(FILE *logs, int argc, char **argv){
+**/
+int choose_port(int argc, char **argv, FILE *logs){
   /* If port isn't specified... */
-  if (argc != 2) {
+  if(argc != 2){
     /* Uses default port 80. */
     print(logs, "Using default port 80.\n");
     return 80;
@@ -95,8 +96,8 @@ int choose_port(FILE *logs, int argc, char **argv){
  *  @param err Will contain an error (or its absence) flag after function execution.
  *  @param f_size Will contain file size after function execution.
  *  @return Returns a pointer to a buffer that contains file contents.
- */
-char* c_read_file(const char * f_name, short * err, size_t * f_size) {
+**/
+char* c_read_file(const char * f_name, short * err, size_t * f_size, FILE *logs){
   char * buffer;
   size_t length;
   /* Trys to open a file. */
@@ -104,29 +105,31 @@ char* c_read_file(const char * f_name, short * err, size_t * f_size) {
   size_t read_length;
   
   /* If the file exists... */
-  if (f) {
+  if(f){
     /* Find its length. */
     fseek(f, 0, SEEK_END);
     length = ftell(f);
     fseek(f, 0, SEEK_SET);
     /* If the file is too large... */
-    if (length > 1073741824) {
+    if(length > 1073741824){
       /* Saves an error and returns NULL. */
       *err = FILE_TOO_LARGE;
+      print(logs, "File is too large.\n");
       return NULL;
     }
     /* If the file isn't too large... */
     /* Allocates some memory for the buffer. */
     buffer = (char *)malloc(length + 1);
-    /* If file isn't empty... */
-    if (length) {
-      /* Reads it byte by byte. */
+    /* If memory for the buffer was successfully allocated... */
+    if(buffer){
+      /* Reads file byte by byte. */
       read_length = fread(buffer, 1, length, f);
       /* If somehow size of what is read isn't equal to size of what is contained in the file... */
-      if (length != read_length) {
+      if(length != read_length){
         /* Frees the buffer, saves an error and returns NULL. */
         free(buffer);
         *err = FILE_READ_ERROR;
+        print(logs, "Error when reading file.\n");
         return NULL;
       }
     }
@@ -134,15 +137,18 @@ char* c_read_file(const char * f_name, short * err, size_t * f_size) {
     fclose(f);
     /* If none of the errors occured previousely, everything is ok. Saves that information. */
     *err = FILE_OK;
+    print(logs, "Successfully read the file.\n");
     /* Closes the buffer for it to be complete. */
     buffer[length] = '\0';
     /* Saves file size. */
     *f_size = length;
+    print(logs, "File's length is %lu bytes.\n", length);
   }
   /* If the file doesn't exist... */
-  else {
+  else{
     /* Saves an error and returns NULL. */
     *err = FILE_DOESNOT_EXIST;
+    print(logs, "File doesn't exist.\n");
     return NULL;
   }
   /* Always returns buffer. */

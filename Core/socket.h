@@ -13,18 +13,10 @@ void accept_socket_and_open_thread(int *server_descriptor, char *logs_str);
 
 void* process_socket(void* sock);
 
-short send_response(int socket, int response_type, char *filename);
+void send_response(int socket, int response_type, char *filepath, FILE *logs);
 
-short send_content(int socket, char *filename, char *headers, int error_counter);
+void send_content(int socket, char *filepath, char *headers, FILE *logs);
 
-unsigned long get_file_data(char *filename, char *content_type, int *response_code);
-
-int get_filepath(char buffer[], char *filepath);
-
-int is_it_this_possible_route(char buffer[], char *possible_route, char *actual_route);
-
-int get_filename(char buffer[], char *filename);
-
-int check_route(char buffer[], char route_to_check[], char* possible_route, char *actual_route);
+unsigned long get_file_data(char *filepath, char *content_type, int *response_code);
 
 #endif
