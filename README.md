@@ -56,6 +56,20 @@ The default views directory is `../public/views`.
 - `core/helpful.c` — logging, time formatting, port parsing, and file reading
 - `public/views/` — static website files
 
+## Routes
+
+Routes are defined by the directories inside `public/views/`:
+
+- `/` resolves to `public/views/main/index.html`
+- `/about/` resolves to `public/views/about/index.html`
+- `/contacts/` resolves to `public/views/contacts/index.html`
+- `/information/` resolves to `public/views/information/index.html`
+- `/rules/` resolves to `public/views/rules/index.html`
+
+Files requested without an explicit route are looked up under `public/views/main/`.
+Missing files use the `public/views/err404/` page. Route resolution is performed
+directly against the filesystem; there is no saved route-list file.
+
 ## Current limitations
 
 - Requests are limited by the server’s fixed request buffer.
