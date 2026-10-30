@@ -3,6 +3,6 @@
 
 #include <stdio.h>
 
-int get_filepath(char *url, char *filepath, FILE *logs);
+int get_filepath(const char *url, char *filepath, size_t filepath_size, FILE *logs);
 
 #endif

@@ -1,168 +1,208 @@
 /** @file get_filepath.c
- *  @brief File that finds the correct filepath for the file to be returned to the user.
- * 
- *  @author Valentine Y. Shevelev (Rokoel)
- *  @bug No known bugs.
-**/
+ *  @brief Resolves request URLs to files under the views directory.
+ */
 
-#include "settings.h"    /* settings' constants */
-#include "helpful.h"    /* print macro */
+#include "settings.h"
+#include "helpful.h"
 
-#include <stdlib.h>
-#include <string.h>    /* strcpy, strcat, strstr, strlen, strcmp */
-#include <stdio.h>    /* struct FILE & related functions */
-#include <dirent.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/stat.h>
 
-/** @brief Function that prepends one string to another.
- * 
- *  This function prepends one string to another. It assumes that
- *  string that another string is being prepended to has enough memory
- *  allocated. And that's alright because we use it the way that we are
- *  sure that enough memory is allocated.
- *  
- *  @param where_to_prepend String to be prepended to.
- *  @param what_to_prepend String that is being prepended.
- *  @return Returns void.
-**/
-void prepend_string(char* where_to_prepend, const char* what_to_prepend){
-    size_t len = strlen(what_to_prepend);
-    memmove(where_to_prepend + len, where_to_prepend, strlen(where_to_prepend) + 1);
-    memcpy(where_to_prepend, what_to_prepend, len);
+#define INTERNAL_PATH_SIZE 4096
+
+static int is_directory(const char *path)
+{
+    struct stat details;
+    return stat(path, &details) == 0 && S_ISDIR(details.st_mode);
 }
 
-/** @brief Function that gets filepath from the url.
- * 
- *  This function gets filepath from the url and returns
- *  response code according to the filepath and initial url.
- *  It doesn't change the url.
- *  The function works in 4 steps:
- *  1. If the file isn't specified, function supposes that index.html is requested.
- *  2. It figures out which one of several routes it is. And if finds none, it
- *  supposes that it is either main or err404.
- *  3. Checks if url is one of possible urls (which are saved in fs.txt). If it is, then
- *  filepath is the correct one and it returns 200.
- *  4. If it isn't one of them, it tries to know, if it is the file requested from err404
- *  page (for example, styles.css) or not. If it is, then the correct filepath is saved.
- *  Err404's index.html filepath is saved otherwise. 404 is returned either way.
- * 
- *  @param url String with url to get filepath from.
- *  @param filepath Pointer to get filepath to.
+static int is_regular_file(const char *path)
+{
+    struct stat details;
+    return stat(path, &details) == 0 && S_ISREG(details.st_mode);
+}
+
+static int set_path(char *destination, size_t destination_size,
+                    const char *path)
+{
+    int written = snprintf(destination, destination_size, "%s", path);
+    return written >= 0 && (size_t)written < destination_size;
+}
+
+static int has_extension(const char *path)
+{
+    const char *last_slash = strrchr(path, '/');
+    const char *last_dot = strrchr(path, '.');
+    return last_dot != NULL &&
+           (last_slash == NULL || last_dot > last_slash);
+}
+
+static int has_dot_segment(const char *path)
+{
+    const char *segment = path;
+
+    while (*segment != '\0') {
+        const char *separator = strchr(segment, '/');
+        size_t length = separator == NULL
+            ? strlen(segment)
+            : (size_t)(separator - segment);
+
+        if ((length == 1 && strncmp(segment, ".", 1) == 0) ||
+            (length == 2 && strncmp(segment, "..", 2) == 0)) {
+            return 1;
+        }
+
+        if (separator == NULL) {
+            break;
+        }
+        segment = separator + 1;
+    }
+
+    return 0;
+}
+
+static int fallback_path(char *filepath, size_t filepath_size, FILE *logs)
+{
+    if (!set_path(filepath, filepath_size, ERROR_404_INDEX_HTML_ROUTE)) {
+        if (logs != NULL) {
+            print(logs, "Fallback path does not fit in the destination buffer.\n");
+        }
+        return 500;
+    }
+
+    if (!is_regular_file(filepath)) {
+        if (logs != NULL) {
+            print(logs, "The 404 fallback file does not exist.\n");
+        }
+        return 500;
+    }
+
+    if (logs != NULL) {
+        print(logs, "Filepath is '%s'.\n", filepath);
+    }
+    return 404;
+}
+
+/** @brief Resolves a URL to a file under VIEWS_FOLDER.
+ *
+ *  Explicit route directories are checked directly. Other paths are
+ *  resolved under the main route. Existing files are found with stat(); no
+ *  generated route list is needed. Missing paths may still resolve to an
+ *  asset belonging to the 404 page.
+ *
+ *  @param url URL path supplied by the client.
+ *  @param filepath Destination for the resolved filesystem path.
+ *  @param filepath_size Size of filepath in bytes.
  *  @param logs File pointer containing logs.
- *  @return Returns response code.
-**/
-int get_filepath(char *url, char *filepath, FILE *logs){
-    /* Initializes filepath. It now contains "url". */
-    strcpy(filepath, url);
+ *  @return 200 for a found file, 404 for the fallback page, or 500 on error.
+ */
+int get_filepath(const char *url, char *filepath, size_t filepath_size, FILE *logs)
+{
+    char normalized[INTERNAL_PATH_SIZE];
+    char candidate[INTERNAL_PATH_SIZE];
 
-    /* If the requested file isn't specified, so the request doesn't contain a dot... */
-    if( !strstr(url, ".") ){
-        /* There are two possibilities: */
-        /* If file ends with "/"... */
-        if( url[strlen(url) - 1] == '/' ){
-            /* Adds only "index.html". */
-            strcat(filepath, INDEX_HTML_FILENAME);
+    if (url == NULL || filepath == NULL || filepath_size == 0) {
+        if (logs != NULL) {
+            print(logs, "Invalid arguments passed to get_filepath().\n");
         }
-        /* If file doesn't end with "/"... */
-        else {
-            /* Adds "/" AND "index.html". */
-            strcat(filepath, INDEX_HTML_FILENAME_WITH_SLASH);
-        }
-    }
-
-    /* Url can start with /[route_name] */
-    struct dirent *directory_entry;
-    /* Tries to open Public/Views directory. */
-    DIR *directory = opendir(VIEWS_FOLDER);
-    /* If it couldn't be opened, returns 500. */
-    if(directory == NULL){
-        print(logs, "Could not open current directory.\n");
         return 500;
     }
 
-    int is_one_of_routes = 0;
-    /* Gets all possible routes' names and tries to find them in the beginning of the url. */
-    while ((directory_entry = readdir(directory)) != NULL){
-        if( strcmp(directory_entry->d_name, ".") && strcmp(directory_entry->d_name, "..")){
-            char possible_route[POSSIBLE_ROUTE_LEN] = "/";
-            strcat(possible_route, directory_entry->d_name);
-            /* If it is one of the routes... */
-            if(strncmp(possible_route, filepath, strlen(possible_route)) == 0){
-                /* It is enough and we can leave the loop. */
-                is_one_of_routes = 1;
-                break;
+    if (url[0] != '/') {
+        if (logs != NULL) {
+            print(logs, "Request URL must start with '/'.\n");
+        }
+        return fallback_path(filepath, filepath_size, logs);
+    }
+
+    /* Ignore a query string and fragment when mapping the URL to a file. */
+    size_t url_length = strcspn(url, "?#");
+    if (url_length == 0 || url_length >= sizeof normalized ||
+        has_dot_segment(url)) {
+        if (logs != NULL) {
+            print(logs, "Request URL is invalid or unsafe.\n");
+        }
+        return fallback_path(filepath, filepath_size, logs);
+    }
+
+    memcpy(normalized, url, url_length);
+    normalized[url_length] = '\0';
+    if (strchr(normalized, '\\') != NULL) {
+        if (logs != NULL) {
+            print(logs, "Request URL contains an invalid path separator.\n");
+        }
+        return fallback_path(filepath, filepath_size, logs);
+    }
+
+    /* Directory-like URLs map to index.html, preserving the old behavior. */
+    size_t normalized_length = strlen(normalized);
+    if (normalized[normalized_length - 1] == '/') {
+        if (snprintf(normalized + normalized_length,
+                     sizeof normalized - normalized_length,
+                     "%s", INDEX_HTML_FILENAME) >=
+            (int)(sizeof normalized - normalized_length)) {
+            return fallback_path(filepath, filepath_size, logs);
+        }
+    } else if (!has_extension(normalized)) {
+        if (snprintf(normalized + normalized_length,
+                     sizeof normalized - normalized_length,
+                     "%s", INDEX_HTML_FILENAME_WITH_SLASH) >=
+            (int)(sizeof normalized - normalized_length)) {
+            return fallback_path(filepath, filepath_size, logs);
+        }
+    }
+
+    /* Determine whether the first URL component names a route directory. */
+    const char *first_component = normalized + 1;
+    const char *first_separator = strchr(first_component, '/');
+    size_t first_component_length = first_separator == NULL
+        ? strlen(first_component)
+        : (size_t)(first_separator - first_component);
+    char route_directory[INTERNAL_PATH_SIZE];
+    int route_written = snprintf(
+        route_directory, sizeof route_directory, "%s/%.*s",
+        VIEWS_FOLDER, (int)first_component_length, first_component
+    );
+    int explicit_route = route_written >= 0 &&
+                         (size_t)route_written < sizeof route_directory &&
+                         is_directory(route_directory);
+
+    const char *route_prefix = explicit_route ? "" : "/main";
+    int candidate_written = snprintf(
+        candidate, sizeof candidate, "%s%s%s",
+        VIEWS_FOLDER, route_prefix, normalized
+    );
+    if (candidate_written >= 0 &&
+        (size_t)candidate_written < sizeof candidate &&
+        is_regular_file(candidate)) {
+        if (!set_path(filepath, filepath_size, candidate)) {
+            if (logs != NULL) {
+                print(logs, "Resolved path does not fit in the destination buffer.\n");
             }
+            return 500;
         }
-    }
-    /* Doesn't forget to close opened directory. */
-    closedir(directory);
-
-    /* If the main page is requested... */
-    if(is_one_of_routes == 0){
-        /* The main page doesn't usually specify "main" route. So it simply starts with /[folder_inside_main...]. */
-        /* So in order to be able to get file from the filepath, adding "/main" is needed. */
-        prepend_string(filepath, "/main");
-    }
-    
-    ////////////////////!!!!!!!!!!!!!!!! DOES PREPENDING CAUSE MEMORY LEAKS??????????/////////////
-
-
-    /* Prepends "../Public/Views" for getting file from filepath in the future. */
-    prepend_string(filepath, VIEWS_FOLDER);
-
-    /* Supposes that there is no file found. */
-    int response_code = 404;
-    /* Opens file that contains all possible routes. */
-    FILE *fs = fopen(FILESTRUCTURE_LOCATION, "r");
-    /* If the file cannot be opened... */
-    if(!fs){
-        /* Marks it as Internal Server Error and returns associated code. */
-        print(logs, "Couldn't open fs.txt.\n");
-        return 500;
-    }
-
-    /* Initializes possible route. */
-    char possible_route[POSSIBLE_ROUTE_LEN] = "";
-    /* Possible routes are saved on each line of the previousely opened file (fs). */
-    while (fgets(possible_route, POSSIBLE_ROUTE_LEN, fs) != NULL){
-        /* As fgets gets string WITH "\n" in the end, removes "\n" from the end of the line. */
-        int size = strlen(possible_route);
-        possible_route[size-1] = '\0';
-        /* If the url is actually one of possible routes... */
-        if( !strcmp(filepath, possible_route) ){
+        if (logs != NULL) {
             print(logs, "Filepath is '%s'.\n", filepath);
-            return 200;
         }
+        return 200;
     }
 
-    /* If it isn't one of possible urls... */
-    print(logs, "It's 404 Not Found.\n");
-    /* Starts from the beginning of the file. */
-    fseek(fs, 0, SEEK_SET);
-    while (fgets(possible_route, POSSIBLE_ROUTE_LEN, fs) != NULL){
-        /* As fgets gets string WITH "\n" in the end, removes "\n" from the end of the line. */
-        int size = strlen(possible_route);
-        possible_route[size-1] = '\0';
-        /* If the url that was gotten from the file is err404 url... */
-        if( strstr(possible_route, ERROR_404_PAGE_FOLDER) ){
-            char buffer[POSSIBLE_ROUTE_LEN];
-            /* Tries to understand if the request is complete nonsense or just err404 page requested data files by */
-            /* trying to find similarities in filepath and possible err404 routes (example: tries to find /css/styles.css in the request). */
-            strcpy(buffer, possible_route + strlen(VIEWS_FOLDER) + strlen(ERROR_404_PAGE_FOLDER) + 1);
-            /* If it isn't nonsense... */
-            if(strstr(filepath, buffer)){
-                /* Saves requested data's filepath. */
-                strcpy(filepath, possible_route);
-                print(logs, "Filepath is '%s'.\n", filepath);
-                /* And returns 200 because file was actually found. */
-                return 200;
-            }
+    /* Try the requested path as an asset belonging to the 404 page. */
+    candidate_written = snprintf(
+        candidate, sizeof candidate, "%s/err404%s", VIEWS_FOLDER, normalized
+    );
+    if (candidate_written >= 0 &&
+        (size_t)candidate_written < sizeof candidate &&
+        is_regular_file(candidate)) {
+        if (!set_path(filepath, filepath_size, candidate)) {
+            return 500;
         }
+        if (logs != NULL) {
+            print(logs, "Filepath is '%s'.\n", filepath);
+        }
+        return 200;
     }
 
-    /* If the request is complete nonsense, sets file to be err404's index.html. */
-    strcpy(filepath, ERROR_404_INDEX_HTML_ROUTE);
-    print(logs, "Filepath is '%s'.\n", filepath);
-
-    /* Response code is obviously 404 in this case. */
-    return response_code;
+    return fallback_path(filepath, filepath_size, logs);
 }

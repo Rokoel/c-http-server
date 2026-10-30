@@ -13,9 +13,7 @@
  * 
  *  - get_file_data, which gets requested file's content-type and responce code.
  * 
- *  @author Valentine Y. Shevelev (Rokoel)
- *  @bug No known bugs.
- *  @todo POST requests.
+ *  @author Rokoel
  */
 
 #include "helpful.h"    /* print macro */
@@ -33,19 +31,12 @@
 
 #include <sys/stat.h>    /* stat */
 
-#include <fcntl.h>    /* fcntl */
 #include <errno.h>    /* errno, EWOULDBLOCK */
 
 
 #define BUFSIZE 1024
-#define MAX_FILENAME_SIZE 64
-#define MAX_HEADER_LINE_SIZE 96
 #define MAX_CONTENT_TYPE_SIZE 64
 #define MAX_HEADERS_SIZE 700
-#define MAX_REQUESTED_ROUTE_SIZE 32
-#define MAX_POSSIBLE_ROUTE_SIZE 34
-
-#define MAX_ERRS 8
 
 /**
  * @brief Function that waits for connections and accepts them.
@@ -57,27 +48,39 @@
  * @return Returns void.
 **/
 void accept_socket_and_open_thread(int *server_descriptor, char *logs_str){
+    if (server_descriptor == NULL || *server_descriptor < 0) {
+        return;
+    }
 
     /* Creates Socket structure. */
     Socket sock;
 
     /* Accepts an incoming connection. */
-    int clilen = 16; /* that is from sizeof() and always stays the same */
-    sock.socket_file_descriptor = accept(*server_descriptor, (struct sockaddr *) &(sock.address), &clilen);
+    socklen_t client_length = sizeof sock.address;
+    sock.socket_file_descriptor = accept(
+        *server_descriptor,
+        (struct sockaddr *)&sock.address,
+        &client_length
+    );
 
     /* If we got an error when accepting new request... */
     if (sock.socket_file_descriptor == -1) {
         /* And if it is due to the fact that we haven't got any incoming requests... */
-        if (errno == EWOULDBLOCK) {
-            /* Sleeps for 0.5 seconds (this number is gotten experementally) */
-            /* and skip to another loop cycle. */
-            sleep(0.5);
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            /* Avoid a tight loop while waiting for another connection. */
+            usleep(500000);
+        }
+        /* Signals can interrupt accept(); this is not a fatal error. */
+        else if (errno == EINTR) {
+            return;
         }
         /* If this is a different error... */
         else {
-            FILE *logs = fopen(logs_str, "a+");
-            print(logs, "An error occured when accepting connection!");
-            fclose(logs);
+            FILE *logs = logs_str != NULL ? fopen(logs_str, "a+") : NULL;
+            if (logs != NULL) {
+                print(logs, "An error occurred when accepting connection!\n");
+                fclose(logs);
+            }
         }
     }
     /* If there are no errors... */
@@ -86,10 +89,23 @@ void accept_socket_and_open_thread(int *server_descriptor, char *logs_str){
         /* for it to exist after compiler reaches end of */
         /* accept_socket_and_open_thread() function. */
         int *pconnfd = malloc(sizeof *pconnfd);
+        if (pconnfd == NULL) {
+            close(sock.socket_file_descriptor);
+            return;
+        }
+
         *pconnfd = sock.socket_file_descriptor;
         /* Opens a new thread. */
         pthread_t t;
-        pthread_create(&t, NULL, process_socket, pconnfd);
+        int thread_error = pthread_create(&t, NULL, process_socket, pconnfd);
+        if (thread_error != 0) {
+            free(pconnfd);
+            close(sock.socket_file_descriptor);
+            return;
+        }
+
+        /* This server does not retain thread IDs to join later. */
+        pthread_detach(t);
     }
 
 }
@@ -104,79 +120,98 @@ void accept_socket_and_open_thread(int *server_descriptor, char *logs_str){
  * @return Returns void.
 **/
 void* process_socket(void* sock){
-    /* Saves client socket descriptor to local variable so as it can free previousely allocated memory. */
-    int socket = *((int*)sock);
+    if (sock == NULL) {
+        return NULL;
+    }
+
+    int socket = *((int *)sock);
     free(sock);
-    
-    char *current_log_file = (char*)malloc(sizeof(char)*32 + 1), *date_and_time = (char*)malloc(sizeof(char)*DATE_TIME_LEN + 1);
+
+    char current_log_file[DATE_TIME_LEN + 32];
+    char date_and_time[DATE_TIME_LEN];
     /* Gets today's date that will be used in naming current log file. */
-    format_current_time_and_date(date_and_time, 0);
+    if (!format_current_time_date(date_and_time, 0)) {
+        close(socket);
+        return NULL;
+    }
     /* Sets current_log_file to today's log filename. */
-    sprintf(current_log_file, LOGS_LOCATION, date_and_time);
+    if (snprintf(current_log_file, sizeof current_log_file, LOGS_LOCATION,
+                 date_and_time) >= (int)sizeof current_log_file) {
+        close(socket);
+        return NULL;
+    }
     /* Opens logs file. */
     FILE *logs = fopen(current_log_file, "a+");
-    free(current_log_file);
-    /* Gets file's filedescriptor. */
-    int logs_fd = fileno(logs);
-    /* Checks file for being locked/unlocked for writing. */
-    struct flock check_file_lock;
-    fcntl(logs_fd, F_GETLK, &check_file_lock);
-    /* Checks file lock until it is unlocked. */
-    while(check_file_lock.l_type != F_UNLCK){
-        printf("[%s] in %s(): ", date_and_time, __func__);
-        printf("Logs file is currently locked by another thread. Retrying...\n");
-        fcntl(logs_fd, F_GETLK, &check_file_lock);
+    if (logs == NULL) {
+        close(socket);
+        return NULL;
     }
-    free(date_and_time);
-    /* Fills flock structure for locking the file (because we know it's unlocked now). */
-    struct flock set_file_lock;
-    set_file_lock.l_type = F_WRLCK;
-    set_file_lock.l_whence = SEEK_SET;
-    set_file_lock.l_start = 0;
-    set_file_lock.l_len = 0;
-    set_file_lock.l_pid = getpid();
-
-    /* Locks the file. */
-    fcntl(logs_fd, F_SETLK, &set_file_lock);
-    
     /* Creating and filling buffer with zeros. */
     char buffer[BUFSIZE];
-    bzero(buffer, BUFSIZE-1);
+    memset(buffer, 0, sizeof buffer);
     
-    /* Reads from the socket and saves the number of read bytes. */
-    int bytes_read;
-    bytes_read = read(socket, buffer, BUFSIZE-1);
-    
-    /* If we haven't received any data yet, we retry until we get data or we've waited for too long. */
-    int error_max_counter = 10000, error_counter = 0;
-    while(bytes_read == -1 && errno == EWOULDBLOCK && error_counter <= error_max_counter){ // we are reading from socket until it is not blocked
-        print(logs, "Hasn't received any data from the socket. Retrying... Received %d bytes.\n", bytes_read);
-        bytes_read = read(socket, buffer, BUFSIZE-1);
-        ++error_counter;
+    /* Accumulate a request because one read() may contain only part of it. */
+    size_t bytes_received = 0;
+    ssize_t bytes_read = 0;
+    int error_max_counter = 500;
+    int error_counter = 0;
+    int read_failed = 0;
+    while (bytes_received < sizeof buffer - 1) {
+        bytes_read = read(socket, buffer + bytes_received,
+                          sizeof buffer - 1 - bytes_received);
+        if (bytes_read > 0) {
+            bytes_received += (size_t)bytes_read;
+            buffer[bytes_received] = '\0';
+            if (strstr(buffer, "\r\n\r\n") != NULL ||
+                strstr(buffer, "\n\n") != NULL) {
+                break;
+            }
+            continue;
+        }
+
+        if (bytes_read == 0 || errno == EINTR) {
+            if (bytes_read == 0) {
+                break;
+            }
+            continue;
+        }
+
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            if (error_counter++ >= error_max_counter) {
+                read_failed = 1;
+                break;
+            }
+            usleep(10000);
+            continue;
+        }
+
+        read_failed = 1;
+        break;
     }
+
+    bytes_read = read_failed ? -1 : (ssize_t)bytes_received;
     /* If an error still remains or if it occured just now, we print about it and close logs, socket and everything. */
-    if(bytes_read == -1){
-        if(errno != EWOULDBLOCK){
-            print(logs, "An unexpected error occured while reading from the socket.");
+    if (bytes_read == -1) {
+        if (errno != EAGAIN && errno != EWOULDBLOCK) {
+            print(logs, "An unexpected error occurred while reading from the socket.\n");
         }
-        else{
-            print(logs, "Has been waiting for a responce for too long.");
+        else {
+            print(logs, "Has been waiting for a response for too long.\n");
         }
+    }
+    else if (bytes_read == 0) {
+        print(logs, "The client closed the connection without sending data.\n");
     }
     /* If everything is fine... */
-    else{
+    else {
         /* Tells how many bytes it read. */
-        print(logs, "Successfully read %d bytes.\n", bytes_read);
-        /* "Closes" the buffer and prints it. */
-        buffer[BUFSIZE-1] = '\0';
-        buffer[BUFSIZE-2] = '\n';
-        buffer[BUFSIZE-3] = '\r';
-        buffer[BUFSIZE-4] = '\n';
+        print(logs, "Successfully read %zd bytes.\n", bytes_read);
+        buffer[bytes_read] = '\0';
         
         print(logs, "Received from client: \n%s\n", buffer);
 
         /* Tries to parse the request into a structure. */
-        print(logs, "What was processed into a structure:\n")
+        print(logs, "What was processed into a structure:\n");
         struct Request *req = split_buffer(buffer, logs);
 
         /* If parsing is successful... */
@@ -191,7 +226,7 @@ void* process_socket(void* sock){
             // char *filepath = malloc(strlen(VIEWS_FOLDER) + strlen(req->url) + strlen(INDEX_HTML_FILENAME) + strlen(MAIN_PAGE_FOLDER_WITH_SLASH) + 1);
             char filepath[1024];
             /* Gets filepath from the buffer and response code into variables. */
-            int response_code = get_filepath(req->url, filepath, logs);
+            int response_code = get_filepath(req->url, filepath, sizeof filepath, logs);
             print(logs, "Response code is %d.\n", response_code);
             
             /* Sends response to the client (headers and requested content). */
@@ -206,16 +241,15 @@ void* process_socket(void* sock){
         else{
             /* We print about it and return 404. */
             print(logs, "Request has got wrong formatting. Sending err404...\n");
-            char *filepath = malloc(strlen(VIEWS_FOLDER) + strlen("/err404/index.html") + strlen(INDEX_HTML_FILENAME) + strlen(MAIN_PAGE_FOLDER_WITH_SLASH) + 1);
+            char filepath[1024];
 
             /* Gets filepath from the buffer and response code into variables. */
-            int response_code = get_filepath("/err404/index.html", filepath, logs);
+            int response_code = get_filepath("/err404/index.html", filepath, sizeof filepath, logs);
             print(logs, "Response code is %d.\n", response_code);
             
             /* Sends response to the client (headers and requested content). */
             print(logs, "Sending response...\n");
             send_response(socket, response_code, filepath, logs);
-            free(filepath);
             print(logs, "Response sent successfully!\n");
         }
     }
@@ -223,7 +257,7 @@ void* process_socket(void* sock){
     /* Closes everything: socket, logs and thread. */
     close(socket);
     fclose(logs);
-    pthread_exit(0);
+    return NULL;
 }
 
 /**
@@ -240,41 +274,36 @@ void* process_socket(void* sock){
 void send_response(int socket, int response_code, char *filepath, FILE *logs){
     /* Creates variables to be used in the future. We can use static memory allocation because */
     /* we set contents of this arrays by ourselves. */
-    char current_line[MAX_HEADER_LINE_SIZE] = "";
     char headers[MAX_HEADERS_SIZE] = "";
     char content_type[MAX_CONTENT_TYPE_SIZE] = "";
 
     /* Gets information about the file. Response code may be changed in the process. */
     unsigned long file_size = get_file_data(filepath, content_type, &response_code);
 
-    /* Saves first line of headers depending on the response code. */
-    switch (response_code){
+    const char *status_line;
+    switch (response_code) {
         case 200:
-        {
-            strcat(headers, "HTTP/1.1 200 OK\n");
+            status_line = "HTTP/1.1 200 OK\r\n";
             break;
-        }
-        
         case 404:
-        {
-            strcat(headers, "HTTP/1.1 404 Not Found\n");
+            status_line = "HTTP/1.1 404 Not Found\r\n";
             break;
-        }
-
-        /* This doesn't differ from 404 for now. */
         default:
-        {
-            strcat(headers, "HTTP/1.1 500 Internal Server Error\n");
+            status_line = "HTTP/1.1 500 Internal Server Error\r\n";
             break;
-        }
     }
 
-    /* Saves headers to a string. */
-    strcat(headers, "Server: Rokoel WebServer\n");
-    sprintf(current_line, "Content-length: %lu\n", file_size);
-    strcat(headers, current_line);
-    sprintf(current_line, "Content-type: %s\n", content_type);
-    strcat(headers, current_line);
+    int header_length = snprintf(
+        headers, sizeof headers,
+        "%sServer: Rokoel WebServer\r\n"
+        "Content-Length: %lu\r\n"
+        "Content-Type: %s\r\n\r\n",
+        status_line, file_size, content_type
+    );
+    if (header_length < 0 || (size_t)header_length >= sizeof headers) {
+        print(logs, "Response headers are too large.\n");
+        return;
+    }
 
 
     print(logs, "SEND_RESPONSE:\n");
@@ -283,8 +312,6 @@ void send_response(int socket, int response_code, char *filepath, FILE *logs){
     print(logs, "%s", headers);
     print(logs, "-----------------\n");
 
-    /* Ends headers with empty line. */
-    strcat(headers, "\n");
     /* Sends headers alongside with file's contents. */
     send_content(socket, filepath, headers, logs);
 }
@@ -300,6 +327,10 @@ void send_response(int socket, int response_code, char *filepath, FILE *logs){
  * @return Returns file's size.
 **/
 unsigned long get_file_data(char *filepath, char *content_type, int *response_code){
+    if (filepath == NULL || content_type == NULL || response_code == NULL) {
+        return 0;
+    }
+
     /* Gets file data. */
     struct stat file_data;
     /* If somehow file's data cannot be gathered... */
@@ -307,32 +338,42 @@ unsigned long get_file_data(char *filepath, char *content_type, int *response_co
         /* Sets response code to 500 and filepath is now err404's index.html. */
         *response_code = 500;
         strcpy(filepath, ERROR_404_INDEX_HTML_ROUTE);
-        /* We can't do much, so it doesn't really matter. */
+        if (stat(filepath, &file_data) < 0) {
+            content_type[0] = '\0';
+            return 0;
+        }
+    }
+
+    if (!S_ISREG(file_data.st_mode)) {
+        *response_code = 500;
+        content_type[0] = '\0';
         return 0;
     }
     
     /* Gets file's content type. */
-    if (strstr(filepath, ".html"))
+    const char *extension = strrchr(filepath, '.');
+    if (extension != NULL && strcmp(extension, ".html") == 0)
         strcpy(content_type, "text/html");
-    else if (strstr(filepath, ".gif"))
+    else if (extension != NULL && strcmp(extension, ".gif") == 0)
         strcpy(content_type, "image/gif");
-    else if (strstr(filepath, ".jpg"))
-        strcpy(content_type, "image/jpg");
-    else if (strstr(filepath, ".png"))
+    else if (extension != NULL &&
+             (strcmp(extension, ".jpg") == 0 || strcmp(extension, ".jpeg") == 0))
+        strcpy(content_type, "image/jpeg");
+    else if (extension != NULL && strcmp(extension, ".png") == 0)
         strcpy(content_type, "image/png");
-    else if (strstr(filepath, ".css"))
+    else if (extension != NULL && strcmp(extension, ".css") == 0)
         strcpy(content_type, "text/css");
-    else if (strstr(filepath, ".js"))
+    else if (extension != NULL && strcmp(extension, ".js") == 0)
         strcpy(content_type, "text/javascript");
-    else if (strstr(filepath, ".ico"))
+    else if (extension != NULL && strcmp(extension, ".ico") == 0)
         strcpy(content_type, "image/x-icon");
-    else if (strstr(filepath, ".webm"))
+    else if (extension != NULL && strcmp(extension, ".webm") == 0)
         strcpy(content_type, "video/webm");
-    else if (strstr(filepath, ".mp4"))
+    else if (extension != NULL && strcmp(extension, ".mp4") == 0)
         strcpy(content_type, "video/mp4");
-    else if (strstr(filepath, ".mp3"))
+    else if (extension != NULL && strcmp(extension, ".mp3") == 0)
         strcpy(content_type, "audio/mp3");
-    else if (strstr(filepath, ".wav"))
+    else if (extension != NULL && strcmp(extension, ".wav") == 0)
         strcpy(content_type, "audio/wav");
     else 
         strcpy(content_type, "text/plain");
@@ -351,39 +392,64 @@ unsigned long get_file_data(char *filepath, char *content_type, int *response_co
  * @param headers String containing headers.
  * @return Returns void.
 **/
+static int write_all(int socket, const void *data, size_t length){
+    const char *bytes = data;
+    size_t written = 0;
+    unsigned int retries = 0;
+
+    while (written < length) {
+        ssize_t result = write(socket, bytes + written, length - written);
+        if (result > 0) {
+            written += (size_t)result;
+            retries = 0;
+            continue;
+        }
+
+        if (result == -1 && errno == EINTR) {
+            continue;
+        }
+
+        if (result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            if (retries++ >= 1000) {
+                return -1;
+            }
+            usleep(1000);
+            continue;
+        }
+
+        return -1;
+    }
+
+    return 0;
+}
+
 void send_content(int socket, char *filepath, char *headers, FILE *logs){
     short err;
     size_t f_size;
     char * f_data;
     /* Reads a file to a string. */
     f_data = c_read_file(filepath, &err, &f_size, logs);
+    if (f_data == NULL) {
+        print(logs, "Could not read '%s'; response was not sent.\n", filepath);
+        return;
+    }
 
     /* Writes headers. */
-    int n = write(socket, headers, strlen(headers));
-    /* If socket would have been blocked, tries again. */
-    if(n == -1){
-        if(errno == EWOULDBLOCK){
-            int i = 0;
-            while(n == -1 && errno == EWOULDBLOCK && i < 1000){
-                n = write(socket, headers, strlen(headers));
-                print(logs, "Trying to write headers again... Wrote %d bytes this time.\n", n);
-                ++i;
-            }
-        }
+    size_t headers_size = strlen(headers);
+    if (write_all(socket, headers, headers_size) == -1) {
+        print(logs, "Could not write response headers to the socket.\n");
+        free(f_data);
+        return;
     }
-    print(logs, "Successfully wrote %d bytes of headers.\n", n);
+    print(logs, "Successfully wrote %zu bytes of headers.\n", headers_size);
+
     /* Writes file contents. */
-    n = write(socket, f_data, f_size);
-    /* If socket would have been blocked, tries again. */
-    if(n == -1){
-        if(errno == EWOULDBLOCK){
-            while(n == -1 && errno == EWOULDBLOCK){
-                n = write(socket, f_data, f_size);
-                print(logs, "Trying to write file again... Wrote %d bytes this time.\n", n);
-            }
-        }
+    if (write_all(socket, f_data, f_size) == -1) {
+        print(logs, "Could not write file contents to the socket.\n");
+        free(f_data);
+        return;
     }
-    print(logs, "Successfully wrote a file to a socket. It was %d bytes.\n", n);
+    print(logs, "Successfully wrote %zu bytes of file contents to a socket.\n", f_size);
     /* Frees string containing file's content. */
     free(f_data);
 }

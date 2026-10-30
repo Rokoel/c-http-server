@@ -1,10 +1,19 @@
 .vscode/
 .idea/
+.codex
+.aws
+.agents
+compile_commands.json
+.DS_Store
 
+# CMake/build output
+/build/
 CMakeCache.txt
 CMakeFiles/
 CMakeMembers.txt
 cmake_install.cmake
+Makefile
+compile_commands.json
 
 .deps/
 .libs/
@@ -13,8 +22,19 @@ Config.h
 config.log
 config.status
 
-build
-logs
+# Runtime output
+/logs/
+*.log
 
 *.o
 *.obj
+*.a
+*.so
+*.out
+*.exe
+/server
+
+# Temporary/editor files
+*.swp
+*.swo
+*~

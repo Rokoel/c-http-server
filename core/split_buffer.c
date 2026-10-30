@@ -19,108 +19,140 @@
  * 
  * @param raw String that contains raw request.
  * @param logs File pointer containing logs.
- * @todo Add support for other ways to end lines ('\r\n' instead of just '\n').
  * @return Returns a pointer to an allocated chunk of memory that contains request structure.
 */
 struct Request *split_buffer(const char *raw, FILE *logs) {
-    /* Creates Request structure and initializes it. */
-    struct Request *req = NULL;
-    req = malloc(sizeof( *req ));
-    if (!req) {
+    if (raw == NULL) {
+        if (logs != NULL) {
+            print(logs, "Cannot parse a NULL request.\n");
+        }
+        return NULL;
+    }
+
+    struct Request *req = calloc(1, sizeof *req);
+    if (req == NULL) {
         print(logs, "Couldn't allocate memory for Request structure.\n");
         return NULL;
     }
-    memset(req, 0, sizeof( *req ));
 
-    /* Gets method. */
-    /* Gets size of the method. */
-    size_t method_len = strcspn(raw, " ");
-    if(method_len > 128){
-        print(logs, "Normal method can't be THIS big.\n");
+    const char *method_end = strchr(raw, ' ');
+    if (method_end == NULL || method_end == raw) {
+        print(logs, "Request has no valid method separator.\n");
         free_request(req, logs);
         return NULL;
     }
+
+    size_t method_len = (size_t)(method_end - raw);
+    if (method_len > 16) {
+        print(logs, "Request method is too long.\n");
+        free_request(req, logs);
+        return NULL;
+    }
+
     /* Chooses one of the methods. */
-    if (strncmp(raw, "GET", strlen("GET")) == 0) {
+    if (method_len == 3 && memcmp(raw, "GET", 3) == 0) {
         req->method = GET;
-    } else if (strncmp(raw, "POST", strlen("POST")) == 0) {
+    } else if (method_len == 4 && memcmp(raw, "POST", 4) == 0) {
         req->method = POST;
     } else {
         req->method = UNSUPPORTED;
     }
     print(logs, "Got request method: %d.\n", req->method);
-    /* Skips to the part with the url. */
-    raw += method_len + 1;
 
-    /* Gets url. */
-    /* Gets size of the url. */
-    size_t url_len = strcspn(raw, " ");
-    if(url_len > 512){
-        print(logs, "Normal url can't be THIS big.\n");
+    const char *url_start = method_end + 1;
+    const char *url_end = strchr(url_start, ' ');
+    if (url_end == NULL || url_end == url_start) {
+        print(logs, "Request has no valid URL separator.\n");
         free_request(req, logs);
         return NULL;
     }
-    /* Inititalizes url. */
+
+    size_t url_len = (size_t)(url_end - url_start);
+    if (url_len > 512) {
+        print(logs, "Request URL is too long.\n");
+        free_request(req, logs);
+        return NULL;
+    }
+
     req->url = malloc(url_len + 1);
-    if (!req->url) {
-        print(logs, "Couldn't allocate memory for a string url.\n");
+    if (req->url == NULL) {
+        print(logs, "Couldn't allocate memory for a string URL.\n");
         free_request(req, logs);
         return NULL;
     }
-    /* Copies url from request. */
-    strncpy(req->url, raw, url_len);
+    memcpy(req->url, url_start, url_len);
     req->url[url_len] = '\0';
-    /* Skips to the part with the HTTP-version. */
-    raw += url_len + 1;
     print(logs, "Got url: %s.\n", req->url);
 
-    /* Gets HTTP-version. */
-    /* Gets size of HTTP-version. */
-    size_t ver_len = strcspn(raw, "\n");
-    if(ver_len > 128){
-        print(logs, "Normal header can't be THIS big.\n");
+    const char *version_start = url_end + 1;
+    const char *line_end = strstr(version_start, "\r\n");
+    size_t line_ending_length = 2;
+    if (line_end == NULL) {
+        line_end = strchr(version_start, '\n');
+        line_ending_length = 1;
+    }
+    if (line_end == NULL || line_end == version_start) {
+        print(logs, "Request has no valid HTTP version line.\n");
         free_request(req, logs);
         return NULL;
     }
+
+    size_t version_len = (size_t)(line_end - version_start);
+    if (version_len > 128) {
+        print(logs, "HTTP version is too long.\n");
+        free_request(req, logs);
+        return NULL;
+    }
+
     /* Initializes HTTP-version. */
-    req->version = malloc(ver_len + 1);
-    if (!req->version) {
+    req->version = malloc(version_len + 1);
+    if (req->version == NULL) {
         print(logs, "Couldn't allocate memory for a string version.\n");
         free_request(req, logs);
         return NULL;
     }
-    /* Copies HTTP-version from request. */
-    strncpy(req->version, raw, ver_len);
-    req->version[ver_len] = '\0';
+    memcpy(req->version, version_start, version_len);
+    req->version[version_len] = '\0';
     print(logs, "Got HTTP-version: %s.\n", req->version);
 
-    /* Skips to the part with headers. */
-    raw += ver_len + 1;
+    const char *headers_start = line_end + line_ending_length;
+    const char *headers_end = strstr(headers_start, "\r\n\r\n");
+    size_t header_separator_length = 4;
+    if (headers_end == NULL) {
+        headers_end = strstr(headers_start, "\n\n");
+        header_separator_length = 2;
+    }
 
-    size_t headers_size = strspn(raw, "\r\n");
-    if(MAX_HEADERS_SIZE - 1 <= headers_size){
-        strncpy(req->headers, raw, MAX_HEADERS_SIZE-1);
-        req->headers[MAX_HEADERS_SIZE-1] = '\0';
+    if (headers_end == NULL) {
+        /* A request with no headers may end immediately after the request line. */
+        if (*headers_start != '\0') {
+            print(logs, "Request has no complete header section.\n");
+            free_request(req, logs);
+            return NULL;
+        }
+        headers_end = headers_start;
+        header_separator_length = 0;
     }
-    else{
-        strncpy(req->headers, raw, headers_size);
-        req->headers[headers_size] = '\0';
+
+    size_t headers_size = (size_t)(headers_end - headers_start);
+    if (headers_size >= sizeof req->headers) {
+        print(logs, "Request headers are too large.\n");
+        free_request(req, logs);
+        return NULL;
     }
+    memcpy(req->headers, headers_start, headers_size);
+    req->headers[headers_size] = '\0';
     print(logs, "Got headers: %s\n", req->headers);
-    /* Skips to the part with body. */
-    raw += strlen(req->headers) + 2;
 
-    /* Gets the size of request's body. */
-    size_t body_len = strlen(raw);
-    /* Initializes and saves body. */
+    const char *body_start = headers_end + header_separator_length;
+    size_t body_len = strlen(body_start);
     req->body = malloc(body_len + 1);
-    if (!req->body) {
+    if (req->body == NULL) {
         print(logs, "Couldn't allocate memory for a string request's body.\n");
         free_request(req, logs);
         return NULL;
     }
-    strncpy(req->body, raw, body_len);
-    /* Closes body variable. */
+    memcpy(req->body, body_start, body_len);
     req->body[body_len] = '\0';
     print(logs, "Got request's body.\n");
 
@@ -136,8 +168,10 @@ struct Request *split_buffer(const char *raw, FILE *logs) {
  * @return Returns void.
 */
 void free_request(struct Request *req, FILE *logs) {
-    if(req){
+    if (req != NULL) {
+        if (logs != NULL) {
         print(logs, "Freeing request structure...\n");
+        }
         free(req->url);
         free(req->version);
         free(req->body);
