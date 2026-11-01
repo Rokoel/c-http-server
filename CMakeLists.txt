@@ -2,7 +2,7 @@
 cmake_minimum_required(VERSION 3.15)
 
 # Name your project and specify the programming language
-project(MyCProject LANGUAGES C)
+project(HTTPServer LANGUAGES C)
 
 set(ROKOEL_VIEWS_FOLDER "../public/views" CACHE STRING
     "Filesystem path containing the website views")
